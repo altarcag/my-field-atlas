@@ -1,0 +1,1 @@
+CREATE INDEX `idx_atlas_trips_status_created` ON `atlas_trips` (`status`,`created_at`);

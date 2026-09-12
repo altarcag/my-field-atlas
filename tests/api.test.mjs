@@ -1,0 +1,81 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import {sqlite,env} from "./api-runtime.mjs";
+import * as access from "../.sites-runtime/check-modules/api-access.mjs";
+import * as projects from "../.sites-runtime/check-modules/api-projects.mjs";
+import * as trips from "../.sites-runtime/check-modules/api-trips.mjs";
+import * as file from "../.sites-runtime/check-modules/api-file.mjs";
+import * as archive from "../.sites-runtime/check-modules/api-archive.mjs";
+import * as photo from "../.sites-runtime/check-modules/api-photo.mjs";
+import * as complete from "../.sites-runtime/check-modules/api-complete.mjs";
+const origin="https://field-atlas.test";
+let token="";
+function request(path,data,method="POST"){return new Request(origin+path,{method,headers:{Origin:origin,Authorization:"Bearer "+token,"Content-Type":"application/json"},...(data===undefined?{}:{body:JSON.stringify(data)})});}
+const context=id=>({params:Promise.resolve({id})});
+async function jsonOk(response){assert.ok(response.ok,await response.clone().text());return response.json();}
+test("migrate existing uploads, enforce the fixed password, and save multiple files with points in one project",async()=>{
+ const migrations=(await fs.readdir("drizzle")).filter(name=>name.endsWith(".sql")).sort();
+ for(const migration of migrations.slice(0,2))sqlite.exec(await fs.readFile("drizzle/"+migration,"utf8"));
+ const legacyId="42b3216c-08c1-45fe-9667-1dbda3f7342b";
+ const oldSummary={id:legacyId,name:"Earlier upload",date:null,note:"Keep these notes",color:"#b6324d",distance:0,pointCount:2,photoCount:1,routeCount:0,fileName:"earlier.kmz",size:2048,createdAt:"2026-09-01"};
+ sqlite.prepare("INSERT INTO atlas_trips VALUES (?,'ready',?,NULL,?)").run(legacyId,JSON.stringify(oldSummary),oldSummary.createdAt);
+ sqlite.prepare("INSERT INTO atlas_config VALUES (1,'test-owner','old-salt','old-hash')").run();
+ for(const migration of migrations.slice(2))sqlite.exec(await fs.readFile("drizzle/"+migration,"utf8"));
+ const legacy=(await jsonOk(await trips.GET())).trips[0];
+ assert.equal(legacy.pointCount,2);assert.equal(legacy.photoCount,1);assert.equal(legacy.projectId,null);assert.equal(legacy.note,oldSummary.note);
+ const state=await jsonOk(await access.GET(request("/api/access",undefined,"GET")));
+ assert.equal(state.isOwner,false);assert.equal(state.unlocked,false,"even the owner must enter the password");
+ assert.equal((await projects.POST(request("/api/projects",{name:"URG-2026"}))).status,401);
+ assert.equal((await access.POST(request("/api/access",{action:"setup",password:"replacement"}))).status,400);
+ assert.equal((await access.POST(request("/api/access",{action:"unlock",password:"wrong"}))).status,401);
+ const unlock=await access.POST(request("/api/access",{action:"unlock",password:env.UPLOAD_PASSWORD}));assert.equal(unlock.status,200);
+ token=(await unlock.json()).sessionToken;
+ assert.ok(token);assert.equal(unlock.headers.get("Set-Cookie"),null,"cross-site access must not rely on third-party cookies");
+ const project=await jsonOk(await projects.POST(request("/api/projects",{name:"URG-2026"})));
+ assert.equal((await projects.POST(request("/api/projects",{name:"URG-2026"}))).status,409);
+ const ids=[];
+ for(const day of [1,2]){
+  const metadata={projectId:project.id,name:"Day "+day,author:day===1?"Altar":"Friend",date:null,note:"",color:"#b6324d",fileName:day===1?"day1.kmz":"day2.kml",size:4};
+  const {id}=await jsonOk(await trips.POST(request("/api/trips",metadata)));ids.push(id);
+  const part=await jsonOk(await archive.PUT(new Request(origin+"/api/trips/"+id+"/archive?part=1",{method:"PUT",headers:{Origin:origin,Authorization:"Bearer "+token},body:new Uint8Array([80,75,3,4])}),context(id)));
+  const photoUrl="/api/files/"+id+"/photos/p0.jpg";
+  await jsonOk(await photo.PUT(new Request(origin+"/api/trips/"+id+"/photos/p0.jpg",{method:"PUT",headers:{Origin:origin,Authorization:"Bearer "+token},body:new Uint8Array([255,216,255,217])}),{params:Promise.resolve({id,photo:"p0.jpg"})}));
+  const data={routes:[],points:[{id:"point",name:"Outcrop",coordinates:[32.5,39.5],description:"",photos:[{id:"photo",name:"Outcrop photo",url:photoUrl}]},{id:"plain",name:"Waypoint",coordinates:[32.6,39.6],description:"",photos:[]}],warnings:[]};
+  const saved=await jsonOk(await complete.POST(request("/api/trips/"+id+"/complete",{data,parts:[part]}),context(id)));
+  assert.equal(saved.projectId,project.id);assert.equal(saved.author,metadata.author);assert.equal(saved.pointCount,2);assert.equal(saved.photoCount,1);assert.equal(saved.routeCount,0);
+  const loaded=await jsonOk(await file.GET(request("/api/trips/"+id,undefined,"GET"),context(id)));
+  assert.deepEqual(loaded.points,data.points);
+ }
+ assert.equal((await jsonOk(await trips.GET())).trips.filter(item=>item.projectId===project.id).length,2);
+ const moved=await jsonOk(await file.PATCH(request("/api/trips/"+legacyId,{projectId:project.id,name:"Early test",author:"Altar"},"PATCH"),context(legacyId)));
+ assert.equal(moved.projectId,project.id);assert.equal(moved.pointCount,2);assert.equal(moved.photoCount,1);assert.equal(moved.note,oldSummary.note);
+ assert.equal(sqlite.prepare("PRAGMA foreign_key_check").all().length,0);
+ assert.equal((await file.DELETE(request("/api/trips/"+ids[0],undefined,"DELETE"),context(ids[0]))).status,403,"shared uploaders cannot delete saved files");
+ const oldToken=token;
+ token=(await jsonOk(await access.POST(request("/api/access",{action:"unlock",password:env.ADMIN_PASSWORD})))).sessionToken;
+ assert.equal((await jsonOk(await access.GET(request("/api/access",undefined,"GET")))).isOwner,true);
+ assert.equal((await file.DELETE(request("/api/trips/"+ids[0],undefined,"DELETE"),context(ids[0]))).status,200);
+ await jsonOk(await access.POST(request("/api/access",{action:"lock"})));
+ assert.equal((await jsonOk(await access.GET(request("/api/access",undefined,"GET")))).unlocked,false);
+ token=oldToken;
+ const foreignRequest=request("/api/projects",{name:"Untrusted"});foreignRequest.headers.set("Origin","https://other.test");
+ assert.equal((await projects.POST(foreignRequest)).status,403);
+ env.UPLOAD_PASSWORD="new-test-secret";
+ assert.equal((await jsonOk(await access.GET(request("/api/access",undefined,"GET")))).unlocked,false);
+ assert.equal((await trips.POST(request("/api/trips",{}))).status,401);
+});
+
+test("the Worker routes browser CORS preflights and API calls from GitHub Pages",async()=>{
+ const {default:worker}=await import("../.sites-runtime/check-modules/api-worker.mjs");
+ const headers={Origin:"https://altarcag.github.io","Access-Control-Request-Method":"PUT","Access-Control-Request-Headers":"authorization,content-type"};
+ const preflight=await worker.fetch(new Request("https://worker.test/api/trips/123/archive",{method:"OPTIONS",headers}));
+ assert.equal(preflight.status,204);assert.equal(preflight.headers.get("Access-Control-Allow-Origin"),headers.Origin);
+ assert.match(preflight.headers.get("Access-Control-Allow-Headers"),/Authorization/);
+ const health=await worker.fetch(new Request("https://worker.test/api/health",{headers:{Origin:headers.Origin}}));
+ assert.equal(health.status,200);assert.equal((await health.json()).application,"my-field-atlas");
+ const denied=await worker.fetch(new Request("https://worker.test/api/projects",{method:"POST",headers:{Origin:"https://other.test"}}));
+ assert.equal(denied.status,403);assert.equal(denied.headers.get("Access-Control-Allow-Origin"),null);
+ const listing=await worker.fetch(new Request("https://worker.test/api/trips",{headers:{Origin:headers.Origin}}));
+ assert.equal(listing.status,200);assert.ok((await listing.json()).trips.length);
+});
