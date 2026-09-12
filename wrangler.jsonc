@@ -6,7 +6,6 @@
  "compatibility_flags":["nodejs_compat"],
  "workers_dev":true,
  "vars":{"ALLOWED_ORIGIN":"https://altarcag.github.io"},
- "limits":{"cpu_ms":10},
  "d1_databases":[{"binding":"DB","database_name":"my-field-atlas-db","database_id":"REPLACE_WITH_YOUR_D1_DATABASE_ID","migrations_dir":"drizzle"}],
  "r2_buckets":[{"binding":"BUCKET","bucket_name":"my-field-atlas-files"}]
 }
