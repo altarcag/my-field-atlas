@@ -1,0 +1,41 @@
+name: Publish website
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['README.md', 'docs/**']
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: pnpm/action-setup@v4
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck && pnpm test
+      - name: Check backend address
+        env:
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+        run: node -e 'const u=new URL(process.env.VITE_API_BASE_URL); if(u.protocol!=="https:" || u.pathname!=="/" || u.search || u.hash) throw Error("Set VITE_API_BASE_URL to the HTTPS Worker origin, without /api")'
+      - run: pnpm build
+        env:
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+          VITE_BASE_PATH: /my-field-atlas/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - id: deployment
+        uses: actions/deploy-pages@v4
