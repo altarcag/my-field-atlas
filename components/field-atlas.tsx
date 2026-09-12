@@ -1,7 +1,7 @@
 "use client";
 import { useCallback,useEffect,useMemo,useRef,useState } from "react";
 import { flushSync } from "react-dom";
-import { Map as MapIcon, Mountain, Satellite, Upload, Library, LockKeyhole, Unlock, ChevronRight, ChevronLeft, ChevronDown, MapPinned, Route, Camera, Crosshair, Download, Trash2, X, ArrowUpRight, LoaderCircle, AlertCircle, Layers, Check, FileArchive, MapPin, FolderPlus, Pencil, UserRound } from "lucide-react";
+import { Map as MapIcon, Mountain, Satellite, Upload, Library, LockKeyhole, Unlock, ChevronRight, ChevronLeft, ChevronDown, MapPinned, Route, Camera, Crosshair, Download, Trash2, X, LoaderCircle, AlertCircle, Layers, Check, FileArchive, MapPin, FolderPlus, Pencil, UserRound } from "lucide-react";
 import { SidebarProvider,Sidebar,SidebarHeader,SidebarContent,SidebarFooter,SidebarMenu,SidebarMenuItem,SidebarMenuButton,SidebarTrigger,useSidebar } from "@/components/ui/sidebar";
 import { Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog,AlertDialogContent,AlertDialogHeader,AlertDialogTitle,AlertDialogDescription,AlertDialogFooter,AlertDialogCancel,AlertDialogAction } from "@/components/ui/alert-dialog";
@@ -26,14 +26,17 @@ function PhotoImage({photo,className=""}:{photo:FieldPhoto;className?:string}) {
  useEffect(()=>setFailed(false),[photo.url]);
  return failed?<div className={"unavailable-photo "+className}><Camera size={24}/><span>Photo unavailable</span></div>:<img src={apiUrl(photo.url)} alt={photo.name} loading="lazy" className={className} onError={()=>setFailed(true)}/>;
 }
-function Navigation({access,onAccess}:{access:Access|null;onAccess:()=>void}) {
+type WorkspaceId="field-map"|"urg-2026";
+function Navigation({access,onAccess,activeWorkspace,onWorkspace}:{access:Access|null;onAccess:()=>void;activeWorkspace:WorkspaceId;onWorkspace:(workspace:WorkspaceId)=>void}) {
  const {setOpenMobile}=useSidebar();
+ const chooseWorkspace=(workspace:WorkspaceId)=>{onWorkspace(workspace);setOpenMobile(false);};
  return <Sidebar className="atlas-sidebar">
   <SidebarHeader className="brand"><CompassMark/><div><strong>MY FIELD ATLAS</strong><span>Geological field notebook</span></div></SidebarHeader>
   <SidebarContent className="nav-content">
    <p className="nav-eyebrow">WORKSPACE</p>
    <SidebarMenu>
-    <SidebarMenuItem><SidebarMenuButton isActive className="nav-item active" onClick={()=>setOpenMobile(false)}><MapIcon size={19}/><span>Field map</span><ChevronRight className="nav-arrow" size={15}/></SidebarMenuButton></SidebarMenuItem>
+    <SidebarMenuItem><SidebarMenuButton isActive={activeWorkspace==="field-map"} className={"nav-item "+(activeWorkspace==="field-map"?"active":"")} onClick={()=>chooseWorkspace("field-map")}><MapIcon size={19}/><span>My Field Map</span><ChevronRight className="nav-arrow" size={15}/></SidebarMenuButton></SidebarMenuItem>
+    <SidebarMenuItem><SidebarMenuButton isActive={activeWorkspace==="urg-2026"} className={"nav-item "+(activeWorkspace==="urg-2026"?"active":"")} onClick={()=>chooseWorkspace("urg-2026")}><Route size={19}/><span>URG-2026</span><ChevronRight className="nav-arrow" size={15}/></SidebarMenuButton></SidebarMenuItem>
     <SidebarMenuItem><SidebarMenuButton disabled className="nav-item library-nav" aria-label="Library, planned for a future version"><Library size={19}/><span>Library</span><span className="soon">Soon</span></SidebarMenuButton></SidebarMenuItem>
    </SidebarMenu>
    <div className="sidebar-divider"/>
@@ -49,17 +52,22 @@ type PhotoSelection={trip:Trip;point:Waypoint;photoId?:string};
 export default function FieldAtlas() {
  const [summaries,setSummaries]=useState<TripSummary[]>([]),[cache,setCache]=useState<Record<string,Trip>>({}),[visible,setVisible]=useState<Set<string>>(new Set()),[selectedId,setSelectedId]=useState<string|null>(null);
  const [loading,setLoading]=useState(true),[loadError,setLoadError]=useState(""),[loadingTrip,setLoadingTrip]=useState<string|null>(null),[access,setAccess]=useState<Access|null>(null);
- const [mode,setMode]=useState<MapMode>("map"),[photosVisible,setPhotosVisible]=useState(true),[uploadOpen,setUploadOpen]=useState(false),[accessOpen,setAccessOpen]=useState(false),[panelOpen,setPanelOpen]=useState(true);
+ const [mode,setMode]=useState<MapMode>("map"),[photosVisible,setPhotosVisible]=useState(true),[uploadOpen,setUploadOpen]=useState(false),[accessOpen,setAccessOpen]=useState(false),[panelOpen,setPanelOpen]=useState(false);
+ const [activeWorkspace,setActiveWorkspace]=useState<WorkspaceId>("field-map"),[detailOpen,setDetailOpen]=useState(false);
  const [selection,setSelection]=useState<PhotoSelection|null>(null),[coords,setCoords]=useState({lng:34.4,lat:39.2,zoom:6.2}),[confirm,setConfirm]=useState<string|null>(null),[removing,setRemoving]=useState(false);
  const [projects,setProjects]=useState<Project[]>([]),[uploadProject,setUploadProject]=useState<string|null>(null),[uploadPurpose,setUploadPurpose]=useState<"file"|"project">("file"),[loadingIds,setLoadingIds]=useState<Set<string>>(new Set());
  const [editing,setEditing]=useState<TripSummary|null>(null),[editProject,setEditProject]=useState(""),[editName,setEditName]=useState(""),[editAuthor,setEditAuthor]=useState(""),[editError,setEditError]=useState(""),[editBusy,setEditBusy]=useState(false);
  const map=useRef<MapHandle>(null),cacheRef=useRef(cache),inflight=useRef(new Map<string,Promise<Trip>>()),selectedRef=useRef(selectedId);
  cacheRef.current=cache;selectedRef.current=selectedId;
- const groups=useMemo(()=>groupFiles(projects,summaries),[projects,summaries]);
+ const urgProjectIds=useMemo(()=>new Set(projects.filter(project=>project.name.trim().toLocaleLowerCase()==="urg-2026").map(project=>project.id)),[projects]);
+ const workspaceProjects=useMemo(()=>activeWorkspace==="field-map"?projects:projects.filter(project=>urgProjectIds.has(project.id)),[activeWorkspace,projects,urgProjectIds]);
+ const workspaceSummaries=useMemo(()=>activeWorkspace==="field-map"?summaries:summaries.filter(file=>file.projectId&&urgProjectIds.has(file.projectId)),[activeWorkspace,summaries,urgProjectIds]);
+ const groups=useMemo(()=>groupFiles(workspaceProjects,workspaceSummaries),[workspaceProjects,workspaceSummaries]);
  const visibleRef=useRef(visible);visibleRef.current=visible;
  const selected=selectedId?cache[selectedId]:undefined;
  const selectedSummary=summaries.find(t=>t.id===selectedId);
- const mapTrips=useMemo(()=>Object.values(cache).filter(t=>visible.has(t.id)),[cache,visible]);
+ const workspaceFileIds=useMemo(()=>new Set(workspaceSummaries.map(file=>file.id)),[workspaceSummaries]);
+ const mapTrips=useMemo(()=>Object.values(cache).filter(t=>visible.has(t.id)&&workspaceFileIds.has(t.id)),[cache,visible,workspaceFileIds]);
  const gallery=useMemo(()=>selected?.points.flatMap(p=>p.photos.map(photo=>({point:p,photo})))||[],[selected]);
  const ensureTrip=useCallback(async(id:string)=>{
   if(cacheRef.current[id])return cacheRef.current[id];
@@ -67,15 +75,15 @@ export default function FieldAtlas() {
   const promise=api<Trip>("/api/trips/"+id).then(t=>{setCache(old=>({...old,[id]:t}));return t;}).finally(()=>inflight.current.delete(id));
   inflight.current.set(id,promise);return promise;
  },[]);
- const chooseTrip=useCallback(async(id:string)=>{
-  setSelectedId(id);selectedRef.current=id;setLoadingTrip(id);setVisible(v=>new Set(v).add(id));
+ const chooseTrip=useCallback(async(id:string,showDetails=true)=>{
+  setSelectedId(id);selectedRef.current=id;setDetailOpen(showDetails);setLoadingTrip(id);setVisible(v=>new Set(v).add(id));
   try {const trip=await ensureTrip(id);if(selectedRef.current===id&&visibleRef.current.has(id))map.current?.fit([trip]);}
   catch(e){toast.error((e as Error).message);throw e;}finally{setLoadingTrip(current=>current===id?null:current);}
  },[ensureTrip]);
  const load=useCallback(async()=>{
   setLoading(true);setLoadError("");
   const results=await Promise.allSettled([api<{trips:TripSummary[]}>("/api/trips"),api<Access>("/api/access"),api<{projects:Project[]}>("/api/projects")]);
-  if(results[0].status==="fulfilled"){setSummaries(results[0].value.trips);if(results[0].value.trips.length&&!selectedRef.current)void chooseTrip(results[0].value.trips[0].id).catch(()=>{});}
+  if(results[0].status==="fulfilled"){setSummaries(results[0].value.trips);if(results[0].value.trips.length&&!selectedRef.current)void chooseTrip(results[0].value.trips[0].id,false).catch(()=>{});}
   else setLoadError(results[0].reason.message);
   if(results[1].status==="fulfilled")setAccess(results[1].value);
   else setLoadError(previous=>previous||"Upload access is temporarily unavailable. Please retry.");
@@ -86,6 +94,9 @@ export default function FieldAtlas() {
  useEffect(()=>{const lock=()=>setAccess({configured:true,unlocked:false,isOwner:false});window.addEventListener("atlas-session-expired",lock);return()=>window.removeEventListener("atlas-session-expired",lock);},[]);
  function openUpload(projectId:string|null=null,purpose:"file"|"project"="file"){
   setUploadProject(projectId);setUploadPurpose(purpose);setUploadOpen(true);
+ }
+ function changeWorkspace(workspace:WorkspaceId){
+  setActiveWorkspace(workspace);setSelectedId(null);selectedRef.current=null;setDetailOpen(false);setSelection(null);setPanelOpen(false);
  }
  function projectSaved(project:Project){setProjects(previous=>[project,...previous.filter(p=>p.id!==project.id)]);toast.success("Project created. Add as many files as you need.");}
  async function toggleFiles(files:TripSummary[],show:boolean){
@@ -152,15 +163,20 @@ export default function FieldAtlas() {
   for(const tool of definitions)try{void Promise.resolve(registry.registerTool(tool,{signal:lifecycle.signal})).catch(()=>{});}catch{}
   return()=>lifecycle.abort();
  },[]);
+ const workspaceTitle=activeWorkspace==="field-map"?"My Field Map":"URG-2026";
  return <SidebarProvider style={{"--sidebar-width":"224px"} as React.CSSProperties} className="atlas-app">
-  <Navigation access={access} onAccess={()=>setAccessOpen(true)}/>
+  <Navigation access={access} onAccess={()=>setAccessOpen(true)} activeWorkspace={activeWorkspace} onWorkspace={changeWorkspace}/>
   <main className="atlas-main">
    <header className="workspace-header">
-    <div className="heading-group"><SidebarTrigger className="mobile-nav-trigger"/><div><div className="breadcrumbs">WORKSPACE <ChevronRight size={11}/> FIELD NOTEBOOK</div><h1>Field map<span className="heading-dot">.</span></h1></div></div>
-    <div className="header-actions"><span className="trip-total">{projects.length} project{projects.length!==1?"s":""} · {summaries.length} files</span><Button className="wine-button" onClick={()=>openUpload(selectedSummary?.projectId||null)}><Upload size={17}/>Add file</Button></div>
+    <div className="heading-group"><SidebarTrigger className="mobile-nav-trigger"/><div><div className="breadcrumbs">WORKSPACE <ChevronRight size={11}/> {activeWorkspace==="field-map"?"COLLABORATIVE ATLAS":"FIELD NOTEBOOK"}</div><h1>{workspaceTitle}<span className="heading-dot">.</span></h1></div></div>
+    {selected&&gallery.length>0&&<section className="header-gallery" aria-label="Photographs from the selected file">
+     <span className="header-gallery-label"><Camera size={15}/><span>Photos</span><small>{gallery.length}</small></span>
+     <div className="header-gallery-scroll">{gallery.map(({point,photo},i)=><button key={photo.id} className="header-photo-thumb" onClick={()=>setSelection({trip:selected,point,photoId:photo.id})} aria-label={"Open photograph "+(i+1)+": "+point.name}><PhotoImage photo={photo}/><span>{point.name}</span></button>)}</div>
+    </section>}
+    <div className="header-actions"><span className="trip-total">{workspaceProjects.length} project{workspaceProjects.length!==1?"s":""} · {workspaceSummaries.length} files</span><Button className="wine-button" onClick={()=>openUpload(selectedSummary?.projectId||null)}><Upload size={17}/>Add file</Button></div>
    </header>
    <section className={"map-workspace "+(!panelOpen?"panel-is-closed":"")} aria-label="Field map workspace">
-    <AtlasMap ref={map} trips={mapTrips} mode={mode} selectedId={selectedId} photosVisible={photosVisible} onPoint={(trip,point)=>setSelection({trip,point,photoId:point.photos[0]?.id})} onMove={(lng,lat,zoom)=>setCoords({lng,lat,zoom})}/>
+    <AtlasMap ref={map} trips={mapTrips} mode={mode} selectedId={selectedId} photosVisible={photosVisible} onPoint={(trip,point)=>setSelection({trip,point,photoId:point.photos[0]?.id})} onBackground={()=>setDetailOpen(false)} onMove={(lng,lat,zoom)=>setCoords({lng,lat,zoom})}/>
     <div className="map-mode-wrap">
      <RadioGroup value={mode} onValueChange={v=>setMode(v as MapMode)} className="map-modes" orientation="horizontal" aria-label="Map layer">
       {([{value:"map",label:"Map",Icon:MapIcon},{value:"satellite",label:"Satellite",Icon:Satellite},{value:"terrain",label:"3D terrain",Icon:Mountain}] as const).map(({value,label,Icon})=><label key={value} className={mode===value?"chosen":""}><RadioGroupItem value={value} className="sr-only"/><Icon size={17}/><span>{label}</span></label>)}
@@ -170,7 +186,7 @@ export default function FieldAtlas() {
     <button className="fit-control" aria-label="Fit visible files to map" title="Fit visible files" onClick={()=>map.current?.fit()}><Crosshair size={19}/></button>
     {!panelOpen&&<button className="open-trip-panel" onClick={()=>setPanelOpen(true)}><Layers size={17}/>Projects<span>{groups.length}</span></button>}
     <aside className={"trip-panel "+(!panelOpen?"hidden-panel":"")} aria-label="Fieldwork projects">
-     <div className="panel-heading"><div><span className="panel-overline">YOUR FIELDWORK</span><h2>Projects <span>{projects.length}</span></h2></div><div className="panel-heading-actions"><button className="icon-button" title="Create a project" aria-label="Create a project" onClick={()=>openUpload(null,"project")}><FolderPlus size={18}/></button><button className="icon-button panel-collapse" aria-label="Collapse projects" onClick={()=>setPanelOpen(false)}><ChevronLeft size={18}/></button></div></div>
+     <div className="panel-heading"><div><span className="panel-overline">{activeWorkspace==="field-map"?"SHARED FIELDWORK":"FIELD WORKSPACE"}</span><h2>Projects <span>{workspaceProjects.length}</span></h2></div><div className="panel-heading-actions"><button className="icon-button" title="Create a project" aria-label="Create a project" onClick={()=>openUpload(null,"project")}><FolderPlus size={18}/></button><button className="icon-button panel-collapse" aria-label="Collapse projects" onClick={()=>setPanelOpen(false)}><ChevronLeft size={18}/></button></div></div>
      {loading?<div className="panel-state"><LoaderCircle size={24} className="spin"/><p>Loading projects…</p></div>:loadError?<div className="panel-state"><AlertCircle size={26}/><h3>Couldn’t load your fieldwork</h3><p>{loadError}</p><Button variant="outline" onClick={()=>void load()}>Try again</Button></div>:!groups.length?<div className="empty-trips">
       <div className="empty-route-icon"><MapPinned size={37} strokeWidth={1.2}/></div>
       <span className="small-caps">THE FIRST OF MANY</span><h3>Your fieldwork,<br/>all in one place.</h3>
@@ -178,9 +194,9 @@ export default function FieldAtlas() {
       <Button className="wine-button" onClick={()=>openUpload(null,"project")}><FolderPlus size={16}/>Create a project</Button>
       <div className="kmz-note"><FileArchive size={14}/>Intact KMZs. No unpacking needed.</div>
      </div>:<>
-      <ProjectTree groups={groups} visible={visible} selectedId={selectedId} loadingIds={new Set([...loadingIds,...(loadingTrip?[loadingTrip]:[])])} onToggle={toggleTrip} onToggleProject={(files,show)=>void toggleFiles(files,show)} onSelect={id=>void chooseTrip(id).catch(()=>{})} onAdd={id=>openUpload(id)} onEdit={editFile} canEdit={!!access?.unlocked}/>
-      {selectedSummary&&<div className="trip-detail">
-       <div className="detail-overline">SELECTED FILE<div><a href={apiUrl("/api/files/"+selectedSummary.id+"/original")} title="Download original file" aria-label="Download original file"><Download size={16}/></a>{access?.isOwner&&access.unlocked&&<button aria-label="Delete selected file" title="Delete file" onClick={()=>setConfirm(selectedSummary.id)}><Trash2 size={15}/></button>}</div></div>
+      <ProjectTree groups={groups} visible={visible} selectedId={detailOpen?selectedId:null} loadingIds={new Set([...loadingIds,...(loadingTrip?[loadingTrip]:[])])} onToggle={toggleTrip} onToggleProject={(files,show)=>void toggleFiles(files,show)} onSelect={id=>{if(id===selectedId&&detailOpen)setDetailOpen(false);else void chooseTrip(id).catch(()=>{});}} onAdd={id=>openUpload(id)} onEdit={editFile} canEdit={!!access?.unlocked}/>
+      {selectedSummary&&detailOpen&&workspaceFileIds.has(selectedSummary.id)&&<div className="trip-detail">
+       <div className="detail-overline">SELECTED FILE<div><a href={apiUrl("/api/files/"+selectedSummary.id+"/original")} title="Download original file" aria-label="Download original file"><Download size={16}/></a>{access?.isOwner&&access.unlocked&&<button aria-label="Delete selected file" title="Delete file" onClick={()=>setConfirm(selectedSummary.id)}><Trash2 size={15}/></button>}<button aria-label="Close selected file details" title="Close details" onClick={()=>setDetailOpen(false)}><X size={16}/></button></div></div>
        <h3>{selectedSummary.name}</h3>
        <p className="selected-file-meta"><UserRound size={13}/>{selectedSummary.author||"Author not added"}<span>·</span>{tripDate(selectedSummary.date)}</p>
        {access?.unlocked&&<button className="edit-details-link" onClick={()=>editFile(selectedSummary)}><Pencil size={13}/>Edit details / move to project</button>}
@@ -193,10 +209,6 @@ export default function FieldAtlas() {
      </>}
      <div className="panel-foot"><span className="little-route-line"/><span>Tick a project or choose individual files</span></div>
     </aside>
-    {selected&&gallery.length>0&&<section className="photo-strip" aria-label="Photographs from the selected trip">
-     <div className="photo-strip-title"><span><Camera size={15}/>In the field <small>{gallery.length} photos</small></span><span className="strip-hint">Select a photo to explore <ArrowUpRight size={13}/></span></div>
-     <div className="photo-strip-scroll">{gallery.map(({point,photo},i)=><button key={photo.id} className="photo-thumb" onClick={()=>setSelection({trip:selected,point,photoId:photo.id})} aria-label={"Open photograph "+(i+1)+": "+point.name}><PhotoImage photo={photo}/><span>{point.name}</span></button>)}</div>
-    </section>}
     {!summaries.length&&!loading&&!loadError&&<div className="map-empty-caption"><span className="caption-line"/><p>Ready for your next<br/><strong>day in the field.</strong></p></div>}
     <div className="map-bottom-left"><span className="coordinates">{Math.abs(coords.lat).toFixed(4)}° {coords.lat>=0?"N":"S"}<span>/</span>{Math.abs(coords.lng).toFixed(4)}° {coords.lng>=0?"E":"W"}</span><span className="coordinate-system">WGS 84</span></div>
    </section>

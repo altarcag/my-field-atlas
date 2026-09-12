@@ -9,7 +9,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 
 export type MapMode="map"|"satellite"|"terrain";
 export type MapHandle={fit:(trips?:Trip[])=>void;focus:(point:Waypoint)=>void};
-type Props={trips:Trip[];mode:MapMode;selectedId:string|null;photosVisible:boolean;onPoint:(trip:Trip,point:Waypoint)=>void;onMove:(lng:number,lat:number,zoom:number)=>void};
+type Props={trips:Trip[];mode:MapMode;selectedId:string|null;photosVisible:boolean;onPoint:(trip:Trip,point:Waypoint)=>void;onBackground:()=>void;onMove:(lng:number,lat:number,zoom:number)=>void};
 const EMPTY:FeatureCollection={type:"FeatureCollection",features:[]};
 export const BASE_STYLE:StyleSpecification={
  version:8,
@@ -62,6 +62,7 @@ const AtlasMap=forwardRef<MapHandle,Props>(function AtlasMap(props,ref) {
    let errors=0;
    map.on("error",()=>{errors++;if(errors>2)setError("Some map tiles couldn’t load. Try another map layer.");});
    map.on("sourcedata",e=>{if(e.isSourceLoaded && (e.sourceId==="osm"||e.sourceId==="satellite")){errors=0;setError("");}});
+   map.on("click",()=>latest.current.onBackground());
    map.on("moveend",()=>{const c=map.getCenter();latest.current.onMove(c.lng,c.lat,map.getZoom());});
    map.on("load",()=>{
     map.addSource("trips-routes",{type:"geojson",data:EMPTY});
