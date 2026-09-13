@@ -73,3 +73,15 @@ Keep independent copies of original field files and periodically export D1 and c
 ## Verification
 
 Importer and project checks cover photos-only KMZ, KML, nested/Unicode image paths, route segments, malformed archives, grouping, authors, and partial visibility. API integration checks run actual route handlers with SQLite and a storage test double, applying migrations over a v1 record. They check upload/finalization, owner versus contributor access, session revocation, secret rotation, and cross-origin Worker requests. TypeScript, the static build, and Worker dry-run bundling are also checked. Live cloud acceptance testing follows account configuration.
+
+## Workspace navigation and map controls
+
+Share URG-2026 directly at https://altarcag.github.io/my-field-atlas/#/workspaces/urg-2026 or My Field Map at https://altarcag.github.io/my-field-atlas/#/workspaces/field-map. The link button in the header copies the current workspace URL. Hash links work on GitHub Pages without server rewrites.
+
+Each browser remembers the last project used in each workspace and reopens every file in that project, including newly added files. A workspace link takes priority over the remembered workspace. If the project has been deleted, the first available project is opened instead.
+
+Drag to pan, scroll/pinch to zoom, and right-drag or Ctrl-drag to rotate and tilt. Mouse rotation has a consistent direction across the screen. On touchscreens, twist two fingers to rotate or drag two fingers vertically to tilt. The compass restores north.
+
+Unlock with the owner password to reveal **Delete project** under each project heading. Confirmation is required; deletion removes the project and its files. Shared upload access cannot delete projects.
+
+For maintenance, edit and commit directly to this GitHub repository. Do not use ChatGPT Sites to change this application.

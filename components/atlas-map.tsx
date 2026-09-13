@@ -53,7 +53,7 @@ const AtlasMap=forwardRef<MapHandle,Props>(function AtlasMap(props,ref) {
    if(disposed||!container.current)return;
    gl.setWorkerUrl(__MAPLIBRE_WORKER_URL__);
    markerClass.current=gl.Marker;
-   const map=new gl.Map({container:container.current,style:structuredClone(BASE_STYLE),center:[34.4,39.2],zoom:6.2,maxZoom:19,maxPitch:80,attributionControl:false,canvasContextAttributes:{antialias:true}});
+   const map=new gl.Map({container:container.current,style:structuredClone(BASE_STYLE),center:[34.4,39.2],zoom:6.2,maxZoom:19,maxPitch:70,aroundCenter:false,rollEnabled:false,attributionControl:false,canvasContextAttributes:{antialias:true}});
    mapRef.current=map;
    map.addControl(new gl.NavigationControl({visualizePitch:true}),"top-right");
    map.addControl(new gl.ScaleControl({unit:"metric",maxWidth:100}),"bottom-right");
@@ -111,6 +111,7 @@ const AtlasMap=forwardRef<MapHandle,Props>(function AtlasMap(props,ref) {
   return()=>{markers.current.forEach(marker=>marker.remove());markers.current=[];};
  },[ready,props.trips,props.photosVisible]);
  useEffect(()=>{
+  if(ready&&!props.selectedId&&props.trips.length&&!fitted.current){fit();fitted.current="project";}
   if(!ready || !props.selectedId || fitted.current===props.selectedId)return;
   const selected=props.trips.find(t=>t.id===props.selectedId);
   if(selected){fit([selected]);fitted.current=props.selectedId;}
@@ -123,7 +124,7 @@ const AtlasMap=forwardRef<MapHandle,Props>(function AtlasMap(props,ref) {
   if(props.mode==="terrain") {
    if(!map.getSource("terrain"))map.addSource("terrain",{type:"raster-dem",url:"https://tiles.mapterhorn.com/tilejson.json",attribution:'Terrain: <a href="https://mapterhorn.com/attribution" target="_blank" rel="noopener">Mapterhorn</a>'});
    map.setTerrain({source:"terrain",exaggeration:1.2});
-   map.easeTo({pitch:60,bearing:-20,duration:900});
+   map.easeTo({pitch:50,bearing:map.getBearing(),duration:900});
   } else {map.setTerrain(null);map.easeTo({pitch:0,bearing:0,duration:700});}
  },[ready,props.mode]);
  return <div className="map-renderer">

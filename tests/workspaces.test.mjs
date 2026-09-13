@@ -1,0 +1,19 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {workspaceHash,workspaceFromHash,restoredProjectFiles} from '../.sites-runtime/check-modules/workspaces.mjs';
+const projects=[{id:'a',name:'Other trip'},{id:'u',name:'URG-2026'}];
+const files=[{id:'a1',projectId:'a'},{id:'u1',projectId:'u'},{id:'u2',projectId:'u'}];
+test('workspace links round trip and unknown links have no workspace',()=>{
+ for(const id of ['field-map','urg-2026'])assert.equal(workspaceFromHash(workspaceHash(id)),id);
+ assert.equal(workspaceFromHash('#other'),null);
+});
+test('reopening remembers the entire project including newly added files',()=>{
+ assert.deepEqual(restoredProjectFiles('field-map',projects,files,'u').map(f=>f.id),['u1','u2']);
+});
+test('workspace link overrides a project from another workspace',()=>{
+ assert.deepEqual(restoredProjectFiles('urg-2026',projects,files,'a').map(f=>f.id),['u1','u2']);
+});
+test('deleted project falls back to an available project and empty workspaces stay empty',()=>{
+ assert.deepEqual(restoredProjectFiles('field-map',projects,files,'deleted').map(f=>f.id),['a1']);
+ assert.deepEqual(restoredProjectFiles('urg-2026',[],files,null),[]);
+});

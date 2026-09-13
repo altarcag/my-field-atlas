@@ -17,6 +17,7 @@ import AtlasMap,{type MapHandle,type MapMode} from "./atlas-map";
 import UploadDialog from "./upload-dialog";
 import { api,jsonRequest,fileSize,apiUrl,assetUrl } from "@/lib/client-api";
 import type { Access,Trip,TripSummary,Waypoint,FieldPhoto,Project } from "@/lib/types";
+import { workspaceHash,workspaceFromHash,restoredProjectFiles,readPreference,writePreference,type WorkspaceId } from "@/lib/workspaces";
 import "./field-atlas.css";
 
 function tripDate(s:string|null) {if(!s)return "No date added";return new Date(s+"T12:00:00").toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});}
@@ -26,7 +27,7 @@ function PhotoImage({photo,className=""}:{photo:FieldPhoto;className?:string}) {
  useEffect(()=>setFailed(false),[photo.url]);
  return failed?<div className={"unavailable-photo "+className}><Camera size={24}/><span>Photo unavailable</span></div>:<img src={apiUrl(photo.url)} alt={photo.name} loading="lazy" className={className} onError={()=>setFailed(true)}/>;
 }
-type WorkspaceId="field-map"|"urg-2026";
+
 function Navigation({access,onAccess,activeWorkspace,onWorkspace}:{access:Access|null;onAccess:()=>void;activeWorkspace:WorkspaceId;onWorkspace:(workspace:WorkspaceId)=>void}) {
  const {setOpenMobile}=useSidebar();
  const chooseWorkspace=(workspace:WorkspaceId)=>{onWorkspace(workspace);setOpenMobile(false);};
@@ -53,12 +54,13 @@ export default function FieldAtlas() {
  const [summaries,setSummaries]=useState<TripSummary[]>([]),[cache,setCache]=useState<Record<string,Trip>>({}),[visible,setVisible]=useState<Set<string>>(new Set()),[selectedId,setSelectedId]=useState<string|null>(null);
  const [loading,setLoading]=useState(true),[loadError,setLoadError]=useState(""),[loadingTrip,setLoadingTrip]=useState<string|null>(null),[access,setAccess]=useState<Access|null>(null);
  const [mode,setMode]=useState<MapMode>("map"),[photosVisible,setPhotosVisible]=useState(true),[uploadOpen,setUploadOpen]=useState(false),[accessOpen,setAccessOpen]=useState(false),[panelOpen,setPanelOpen]=useState(false);
- const [activeWorkspace,setActiveWorkspace]=useState<WorkspaceId>("field-map"),[detailOpen,setDetailOpen]=useState(false);
+ const [activeWorkspace,setActiveWorkspace]=useState<WorkspaceId>(()=>workspaceFromHash(window.location.hash)||workspaceFromHash(readPreference("workspace")||"")||"field-map"),[detailOpen,setDetailOpen]=useState(false);
  const [selection,setSelection]=useState<PhotoSelection|null>(null),[coords,setCoords]=useState({lng:34.4,lat:39.2,zoom:6.2}),[confirm,setConfirm]=useState<string|null>(null),[removing,setRemoving]=useState(false);
  const [projects,setProjects]=useState<Project[]>([]),[uploadProject,setUploadProject]=useState<string|null>(null),[uploadPurpose,setUploadPurpose]=useState<"file"|"project">("file"),[loadingIds,setLoadingIds]=useState<Set<string>>(new Set());
  const [editing,setEditing]=useState<TripSummary|null>(null),[editProject,setEditProject]=useState(""),[editName,setEditName]=useState(""),[editAuthor,setEditAuthor]=useState(""),[editError,setEditError]=useState(""),[editBusy,setEditBusy]=useState(false);
  const map=useRef<MapHandle>(null),cacheRef=useRef(cache),inflight=useRef(new Map<string,Promise<Trip>>()),selectedRef=useRef(selectedId);
  cacheRef.current=cache;selectedRef.current=selectedId;
+ const restoredWorkspace=useRef<WorkspaceId|null>(null),restoreGeneration=useRef(0);
  const urgProjectIds=useMemo(()=>new Set(projects.filter(project=>project.name.trim().toLocaleLowerCase()==="urg-2026").map(project=>project.id)),[projects]);
  const workspaceProjects=useMemo(()=>activeWorkspace==="field-map"?projects:projects.filter(project=>urgProjectIds.has(project.id)),[activeWorkspace,projects,urgProjectIds]);
  const workspaceSummaries=useMemo(()=>activeWorkspace==="field-map"?summaries:summaries.filter(file=>file.projectId&&urgProjectIds.has(file.projectId)),[activeWorkspace,summaries,urgProjectIds]);
@@ -68,7 +70,7 @@ export default function FieldAtlas() {
  const selectedSummary=summaries.find(t=>t.id===selectedId);
  const workspaceFileIds=useMemo(()=>new Set(workspaceSummaries.map(file=>file.id)),[workspaceSummaries]);
  const mapTrips=useMemo(()=>Object.values(cache).filter(t=>visible.has(t.id)&&workspaceFileIds.has(t.id)),[cache,visible,workspaceFileIds]);
- const gallery=useMemo(()=>selected?.points.flatMap(p=>p.photos.map(photo=>({point:p,photo})))||[],[selected]);
+ const gallery=useMemo(()=>(selected?[selected]:mapTrips).flatMap(trip=>trip.points.flatMap(point=>point.photos.map(photo=>({trip,point,photo})))),[selected,mapTrips]);
  const ensureTrip=useCallback(async(id:string)=>{
   if(cacheRef.current[id])return cacheRef.current[id];
   if(inflight.current.has(id))return inflight.current.get(id)!;
@@ -76,30 +78,59 @@ export default function FieldAtlas() {
   inflight.current.set(id,promise);return promise;
  },[]);
  const chooseTrip=useCallback(async(id:string,showDetails=true)=>{
+  const projectId=summaries.find(file=>file.id===id)?.projectId;if(projectId)writePreference("project:"+activeWorkspace,projectId);
   setSelectedId(id);selectedRef.current=id;setDetailOpen(showDetails);setLoadingTrip(id);setVisible(v=>new Set(v).add(id));
   try {const trip=await ensureTrip(id);if(selectedRef.current===id&&visibleRef.current.has(id))map.current?.fit([trip]);}
   catch(e){toast.error((e as Error).message);throw e;}finally{setLoadingTrip(current=>current===id?null:current);}
- },[ensureTrip]);
+ },[ensureTrip,summaries,activeWorkspace]);
  const load=useCallback(async()=>{
   setLoading(true);setLoadError("");
   const results=await Promise.allSettled([api<{trips:TripSummary[]}>("/api/trips"),api<Access>("/api/access"),api<{projects:Project[]}>("/api/projects")]);
-  if(results[0].status==="fulfilled"){setSummaries(results[0].value.trips);if(results[0].value.trips.length&&!selectedRef.current)void chooseTrip(results[0].value.trips[0].id,false).catch(()=>{});}
+  if(results[0].status==="fulfilled"){setSummaries(results[0].value.trips);}
   else setLoadError(results[0].reason.message);
   if(results[1].status==="fulfilled")setAccess(results[1].value);
   else setLoadError(previous=>previous||"Upload access is temporarily unavailable. Please retry.");
   if(results[2].status==="fulfilled")setProjects(results[2].value.projects);else setLoadError(previous=>previous||"Projects could not be loaded. Please retry.");
   setLoading(false);
- },[chooseTrip]);
+ },[]);
  useEffect(()=>{void load();},[load]);
  useEffect(()=>{const lock=()=>setAccess({configured:true,unlocked:false,isOwner:false});window.addEventListener("atlas-session-expired",lock);return()=>window.removeEventListener("atlas-session-expired",lock);},[]);
  function openUpload(projectId:string|null=null,purpose:"file"|"project"="file"){
   setUploadProject(projectId);setUploadPurpose(purpose);setUploadOpen(true);
  }
  function changeWorkspace(workspace:WorkspaceId){
+  if(restoredWorkspace.current===workspace)return;
+  restoreGeneration.current++;restoredWorkspace.current=null;
+  if(window.location.hash!==workspaceHash(workspace))window.history.pushState(null,"",workspaceHash(workspace));
   setActiveWorkspace(workspace);setSelectedId(null);selectedRef.current=null;setDetailOpen(false);setSelection(null);setPanelOpen(false);
  }
+ useEffect(()=>{
+  const followLink=()=>{const workspace=workspaceFromHash(window.location.hash);if(workspace)changeWorkspace(workspace);};
+  window.addEventListener("hashchange",followLink);
+  if(!workspaceFromHash(window.location.hash))window.history.replaceState(null,"",workspaceHash(activeWorkspace));
+  return()=>window.removeEventListener("hashchange",followLink);
+ },[]);
+ useEffect(()=>{
+  writePreference("workspace",workspaceHash(activeWorkspace));
+  if(loading||loadError||restoredWorkspace.current===activeWorkspace)return;
+  restoredWorkspace.current=activeWorkspace;
+  const generation=++restoreGeneration.current;
+  const files=restoredProjectFiles(activeWorkspace,projects,summaries,readPreference("project:"+activeWorkspace));
+  if(files[0]?.projectId)writePreference("project:"+activeWorkspace,files[0].projectId);
+  setVisible(new Set(files.map(file=>file.id)));setLoadingIds(new Set(files.map(file=>file.id)));
+  void Promise.allSettled(files.map(file=>ensureTrip(file.id))).then(results=>{
+   if(generation!==restoreGeneration.current)return;
+   const loaded=results.flatMap(result=>result.status==="fulfilled"?[result.value]:[]);
+   setLoadingIds(new Set());
+   if(loaded.length!==files.length)toast.error("Some project files could not load. Tick them again to retry.");
+   const failed=new Set(files.filter((_,index)=>results[index].status==="rejected").map(file=>file.id));
+   setVisible(previous=>new Set([...previous].filter(id=>!failed.has(id))));
+   map.current?.fit(loaded.filter(file=>visibleRef.current.has(file.id)));
+  });
+ },[activeWorkspace,loading,loadError,projects,summaries,ensureTrip]);
  function projectSaved(project:Project){setProjects(previous=>[project,...previous.filter(p=>p.id!==project.id)]);toast.success("Project created. Add as many files as you need.");}
  async function toggleFiles(files:TripSummary[],show:boolean){
+  if(show&&files[0]?.projectId)writePreference("project:"+activeWorkspace,files[0].projectId);
   setVisible(previous=>{const next=new Set(previous);for(const file of files){if(show)next.add(file.id);else next.delete(file.id);}return next;});
   if(!show)return;
   setLoadingIds(previous=>new Set([...previous,...files.map(file=>file.id)]));
@@ -121,6 +152,7 @@ export default function FieldAtlas() {
  }
  async function saved(trip:TripSummary) {
   setSummaries(prev=>[trip,...prev.filter(t=>t.id!==trip.id)]);
+  if(trip.projectId)writePreference("project:"+activeWorkspace,trip.projectId);
   await chooseTrip(trip.id);setPanelOpen(true);toast.success("File saved in its project. Your map is ready.");
  }
  async function removeConfirmed() {
@@ -141,7 +173,7 @@ export default function FieldAtlas() {
    }else{
     const id=confirm;await api("/api/trips/"+id,{method:"DELETE"});
     setSummaries(prev=>prev.filter(t=>t.id!==id));setCache(prev=>{const n={...prev};delete n[id];return n;});setVisible(prev=>{const n=new Set(prev);n.delete(id);return n;});
-    if(selectedId===id)setSelectedId(null);if(selection?.trip.id===id)setSelection(null);toast.success("File deleted.");
+    if(selectedId===id){setSelectedId(null);selectedRef.current=null;setDetailOpen(false);}if(selection?.trip.id===id)setSelection(null);toast.success("File deleted.");
    }
    setConfirm(null);
   }catch(e){toast.error((e as Error).message);}finally{setRemoving(false);}
@@ -179,11 +211,11 @@ export default function FieldAtlas() {
   <main className="atlas-main">
    <header className="workspace-header">
     <div className="heading-group"><SidebarTrigger className="mobile-nav-trigger"/><div><div className="breadcrumbs">WORKSPACE <ChevronRight size={11}/> {activeWorkspace==="field-map"?"COLLABORATIVE ATLAS":"FIELD NOTEBOOK"}</div><h1>{workspaceTitle}<span className="heading-dot">.</span></h1></div></div>
-    {selected&&gallery.length>0&&<section className="header-gallery" aria-label="Photographs from the selected file">
+    {gallery.length>0&&<section className="header-gallery" aria-label="Field photographs">
      <span className="header-gallery-label"><Camera size={15}/><span>Photos</span><small>{gallery.length}</small></span>
-     <div className="header-gallery-scroll">{gallery.map(({point,photo},i)=><button key={photo.id} className="header-photo-thumb" onClick={()=>setSelection({trip:selected,point,photoId:photo.id})} aria-label={"Open photograph "+(i+1)+": "+point.name}><PhotoImage photo={photo}/><span>{point.name}</span></button>)}</div>
+     <div className="header-gallery-scroll">{gallery.map(({trip,point,photo},i)=><button key={trip.id+":"+photo.id} className="header-photo-thumb" onClick={()=>setSelection({trip,point,photoId:photo.id})} aria-label={"Open photograph "+(i+1)+": "+point.name}><PhotoImage photo={photo}/><span>{point.name}</span></button>)}</div>
     </section>}
-    <div className="header-actions"><span className="trip-total">{workspaceProjects.length} project{workspaceProjects.length!==1?"s":""} · {workspaceSummaries.length} files</span><Button className="wine-button" onClick={()=>openUpload(selectedSummary?.projectId||null)}><Upload size={17}/>Add file</Button></div>
+    <div className="header-actions"><a className="workspace-share" href={workspaceHash(activeWorkspace)} onClick={async e=>{e.preventDefault();try{await navigator.clipboard.writeText(window.location.href.split("#")[0]+workspaceHash(activeWorkspace));toast.success("Workspace link copied.");}catch{toast.error("Copy the workspace link from your address bar.");}}} title="Copy workspace link" aria-label="Copy workspace link"><MapPinned size={17}/></a><span className="trip-total">{workspaceProjects.length} project{workspaceProjects.length!==1?"s":""} · {workspaceSummaries.length} files</span><Button className="wine-button" onClick={()=>openUpload(selectedSummary?.projectId||null)}><Upload size={17}/>Add file</Button></div>
    </header>
    <section className={"map-workspace "+(!panelOpen?"panel-is-closed":"")} aria-label="Field map workspace">
     <AtlasMap ref={map} trips={mapTrips} mode={mode} selectedId={selectedId} photosVisible={photosVisible} onPoint={(trip,point)=>setSelection({trip,point,photoId:point.photos[0]?.id})} onBackground={()=>setDetailOpen(false)} onMove={(lng,lat,zoom)=>setCoords({lng,lat,zoom})}/>
@@ -191,7 +223,7 @@ export default function FieldAtlas() {
      <RadioGroup value={mode} onValueChange={v=>setMode(v as MapMode)} className="map-modes" orientation="horizontal" aria-label="Map layer">
       {([{value:"map",label:"Map",Icon:MapIcon},{value:"satellite",label:"Satellite",Icon:Satellite},{value:"terrain",label:"3D terrain",Icon:Mountain}] as const).map(({value,label,Icon})=><label key={value} className={mode===value?"chosen":""}><RadioGroupItem value={value} className="sr-only"/><Icon size={17}/><span>{label}</span></label>)}
      </RadioGroup>
-     {mode==="terrain"&&<div className="terrain-hint"><Mountain size={13}/> Right-drag to rotate & tilt · Elevation ×1.2</div>}
+     {mode==="terrain"&&<div className="terrain-hint"><Mountain size={13}/> Drag to pan · Right/Ctrl-drag to tilt & rotate</div>}
     </div>
     <button className="fit-control" aria-label="Fit visible files to map" title="Fit visible files" onClick={()=>map.current?.fit()}><Crosshair size={19}/></button>
     {!panelOpen&&<button className="open-trip-panel" onClick={()=>setPanelOpen(true)}><Layers size={17}/>Projects<span>{groups.length}</span></button>}
