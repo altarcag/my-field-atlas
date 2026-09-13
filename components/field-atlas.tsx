@@ -219,7 +219,7 @@ export default function FieldAtlas() {
   <Navigation access={access} onAccess={()=>setAccessOpen(true)} activeWorkspace={activeWorkspace} onWorkspace={changeWorkspace}/>
   <main className="atlas-main">
    <header className="workspace-header">
-    <div className="heading-group"><SidebarTrigger className="mobile-nav-trigger"/><div><div className="breadcrumbs">WORKSPACE <ChevronRight size={11}/> {activeWorkspace==="field-map"?"COLLABORATIVE ATLAS":"FIELD NOTEBOOK"}</div><h1>{workspaceTitle}<span className="heading-dot">.</span></h1></div></div>
+    <div className="heading-group"><SidebarTrigger className="mobile-nav-trigger"/><div><div className="breadcrumbs">WORKSPACE <ChevronRight size={11}/> {activeWorkspace==="field-map"?"MY FIELD MAP":"URG-2026"}</div><h1>{workspaceTitle}</h1></div></div>
     {gallery.length>0&&<section className="header-gallery" aria-label="Field photographs">
      <span className="header-gallery-label"><Camera size={15}/><span>Photos</span><small>{gallery.length}</small></span>
      <div className="header-gallery-scroll">{gallery.map(({trip,point,photo},i)=><button key={trip.id+":"+photo.id} className="header-photo-thumb" onClick={()=>setSelection({trip,point,photoId:photo.id})} aria-label={"Open photograph "+(i+1)+": "+point.name}><PhotoImage photo={photo}/><span>{point.name}</span></button>)}</div>
