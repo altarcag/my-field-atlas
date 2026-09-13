@@ -17,7 +17,7 @@ import AtlasMap,{type MapHandle,type MapMode} from "./atlas-map";
 import UploadDialog from "./upload-dialog";
 import { api,jsonRequest,fileSize,apiUrl,assetUrl } from "@/lib/client-api";
 import type { Access,Trip,TripSummary,Waypoint,FieldPhoto,Project } from "@/lib/types";
-import { workspacePath,workspaceFromPath,workspaceFromHash,restoredProjectFiles,readPreference,writePreference,type WorkspaceId } from "@/lib/workspaces";
+import { workspacePath,workspaceFromPath,workspaceHash,workspaceFromHash,restoredProjectFiles,readPreference,writePreference,type WorkspaceId } from "@/lib/workspaces";
 import "./field-atlas.css";
 
 function tripDate(s:string|null) {if(!s)return "No date added";return new Date(s+"T12:00:00").toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});}
