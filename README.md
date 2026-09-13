@@ -46,7 +46,7 @@ The last command checks Worker bundling without publishing. `wrangler.local.json
 
 ## How uploads work
 
-The browser parses KML and extracts referenced pictures from KMZ. It sends the original in 5 MiB parts, normalized photos, and validated route/point data to the API. A file only becomes visible after completion. The website fetches current projects/files from the API, so uploads do not require Git commits or a Pages rebuild.
+The browser parses KML and extracts referenced photographs from KMZ. It sends the original in 5 MiB parts, normalized photos, and validated route/point data to the API. A file only becomes visible after completion. The website fetches current projects/files from the API, so uploads do not require Git commits or a Pages rebuild.
 
 Login uses an eight-hour bearer session stored in the current tab's session storage. Only an HMAC of each random token is stored in D1. Cross-site cookies are not required. Passwords are never included in the frontend build. Every mutation checks the session and allowed Origin; login attempts are rate-limited. Changing a password invalidates sessions created with that password. Author labels are self-reported, not verified identities.
 
