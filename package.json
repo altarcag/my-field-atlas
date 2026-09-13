@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "dev:api": "wrangler dev --config wrangler.local.jsonc --port 8787",
-    "build": "vite build",
+    "build": "vite build && node scripts/create-static-routes.mjs",
     "preview": "vite preview --host 127.0.0.1",
     "typecheck": "tsc --noEmit",
     "test": "node scripts/test-imports.mjs && node scripts/test-api.mjs",
