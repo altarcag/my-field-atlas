@@ -12,7 +12,7 @@ async function dispatch(request:Request):Promise<Response>{
  const {pathname}=new URL(request.url),method=request.method;
  if(pathname==="/api/health"&&method==="GET")return Response.json({ok:true,application:"my-field-atlas"});
  if(pathname==="/api/access"){if(method==="GET")return access.GET(request);if(method==="POST")return access.POST(request);}
- if(pathname==="/api/projects"){if(method==="GET")return projects.GET();if(method==="POST")return projects.POST(request);}
+ if(pathname==="/api/projects"){if(method==="GET")return projects.GET();if(method==="POST")return projects.POST(request);if(method==="DELETE")return projects.DELETE(request);}
  if(pathname==="/api/trips"){if(method==="GET")return trips.GET();if(method==="POST")return trips.POST(request);}
  if(pathname==="/api/uploads"&&method==="DELETE")return uploads.DELETE(request);
  let match=pathname.match(/^\/api\/trips\/([a-f0-9-]{36})(?:\/(archive|complete|photos\/p[0-9]{1,3}\.jpg))?$/);
@@ -20,6 +20,7 @@ async function dispatch(request:Request):Promise<Response>{
   if(!action){if(method==="GET")return file.GET(request,ctx);if(method==="PATCH")return file.PATCH(request,ctx);if(method==="DELETE")return file.DELETE(request,ctx);}
   if(action==="archive"&&method==="PUT")return archive.PUT(request,ctx);
   if(action==="complete"&&method==="POST")return complete.POST(request,ctx);
+  if(action?.startsWith("photos/")&&method==="DELETE")return photo.DELETE(request,{params:Promise.resolve({id,photo:action.slice(7)})});
   if(action?.startsWith("photos/")&&method==="PUT")return photo.PUT(request,{params:Promise.resolve({id,photo:action.slice(7)})});
  }
  match=pathname.match(/^\/api\/files\/([a-f0-9-]{36})\/(original|photos\/p[0-9]{1,3}\.jpg)$/);

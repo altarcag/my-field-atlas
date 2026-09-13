@@ -1,4 +1,4 @@
-import { ApiError, bodyJson, db, errorResponse, requireWrite } from "@/lib/server";
+import { ApiError, bodyJson, db, errorResponse, requireWrite, requireProject, removeTrip, type TripRow } from "@/lib/server";
 import { projectSchema } from "@/lib/validation";
 import type { Project } from "@/lib/types";
 export const dynamic="force-dynamic";
@@ -17,5 +17,19 @@ export async function POST(request:Request) {
   const result=await db().prepare("INSERT INTO atlas_projects (id,name,created_at) VALUES (?,?,?) ON CONFLICT(name) DO NOTHING").bind(project.id,project.name,project.createdAt).run();
   if(result.meta.changes!==1)throw new ApiError("A project with this name already exists. Select it from the project list.",409);
   return Response.json(project,{status:201});
+ }catch(e){return errorResponse(e);}
+}
+
+export async function DELETE(request:Request) {
+ try {
+  const state=await requireWrite(request);
+  if(!state.isOwner)throw new ApiError("Only the owner can delete projects.",403);
+  const id=new URL(request.url).searchParams.get("id")||"";
+  await requireProject(id);
+  const rows=await db().prepare("SELECT * FROM atlas_trips WHERE project_id=?").bind(id).all<TripRow>();
+  if(rows.results.some(row=>row.status!=="ready"))throw new ApiError("Wait for uploads in this project to finish before deleting it.",409);
+  for(const row of rows.results)await removeTrip(row);
+  await db().prepare("DELETE FROM atlas_projects WHERE id=?").bind(id).run();
+  return Response.json({ok:true});
  }catch(e){return errorResponse(e);}
 }
