@@ -155,6 +155,11 @@ export default function FieldAtlas() {
   if(trip.projectId)writePreference("project:"+activeWorkspace,trip.projectId);
   await chooseTrip(trip.id);setPanelOpen(true);toast.success("File saved in its project. Your map is ready.");
  }
+ function requestDelete(target:string) {
+  if(access?.isOwner&&access.unlocked){setConfirm(target);return;}
+  toast.info("Enter the owner password to delete items.");
+  openUpload();
+ }
  async function removeConfirmed() {
   if(!confirm)return;setRemoving(true);
   try {
@@ -236,9 +241,9 @@ export default function FieldAtlas() {
       <Button className="wine-button" onClick={()=>openUpload(null,"project")}><FolderPlus size={16}/>Create a project</Button>
       <div className="kmz-note"><FileArchive size={14}/>Intact KMZs. No unpacking needed.</div>
      </div>:<>
-      <ProjectTree groups={groups} visible={visible} selectedId={detailOpen?selectedId:null} loadingIds={new Set([...loadingIds,...(loadingTrip?[loadingTrip]:[])])} onToggle={toggleTrip} onToggleProject={(files,show)=>void toggleFiles(files,show)} onSelect={id=>{if(id===selectedId&&detailOpen)setDetailOpen(false);else void chooseTrip(id).catch(()=>{});}} onAdd={id=>openUpload(id)} onEdit={editFile} canEdit={!!access?.unlocked} canDelete={!!access?.isOwner&&!!access.unlocked} onDeleteFile={setConfirm} onDeleteProject={id=>setConfirm("project:"+id)}/>
+      <ProjectTree groups={groups} visible={visible} selectedId={detailOpen?selectedId:null} loadingIds={new Set([...loadingIds,...(loadingTrip?[loadingTrip]:[])])} onToggle={toggleTrip} onToggleProject={(files,show)=>void toggleFiles(files,show)} onSelect={id=>{if(id===selectedId&&detailOpen)setDetailOpen(false);else void chooseTrip(id).catch(()=>{});}} onAdd={id=>openUpload(id)} onEdit={editFile} canEdit={!!access?.unlocked} onDeleteFile={requestDelete} onDeleteProject={id=>requestDelete("project:"+id)}/>
       {selectedSummary&&detailOpen&&workspaceFileIds.has(selectedSummary.id)&&<div className="trip-detail">
-       <div className="detail-overline">SELECTED FILE<div><a href={apiUrl("/api/files/"+selectedSummary.id+"/original")} title="Download original file" aria-label="Download original file"><Download size={16}/></a>{access?.isOwner&&access.unlocked&&<button aria-label="Delete selected file" title="Delete file" onClick={()=>setConfirm(selectedSummary.id)}><Trash2 size={15}/></button>}<button aria-label="Close selected file details" title="Close details" onClick={()=>setDetailOpen(false)}><X size={16}/></button></div></div>
+       <div className="detail-overline">SELECTED FILE<div><a href={apiUrl("/api/files/"+selectedSummary.id+"/original")} title="Download original file" aria-label="Download original file"><Download size={16}/></a>{<button aria-label="Delete selected file" title="Delete file" onClick={()=>requestDelete(selectedSummary.id)}><Trash2 size={15}/></button>}<button aria-label="Close selected file details" title="Close details" onClick={()=>setDetailOpen(false)}><X size={16}/></button></div></div>
        <h3>{selectedSummary.name}</h3>
        <p className="selected-file-meta"><UserRound size={13}/>{selectedSummary.author||"Author not added"}<span>·</span>{tripDate(selectedSummary.date)}</p>
        {access?.unlocked&&<button className="edit-details-link" onClick={()=>editFile(selectedSummary)}><Pencil size={13}/>Edit details / move to project</button>}
@@ -271,7 +276,7 @@ export default function FieldAtlas() {
     <DialogHeader><DialogTitle>{selection?.point.name||"Field photograph"}</DialogTitle><DialogDescription>{selection?.trip.name}{viewed?" · Photograph "+(viewerIndex+1)+" of "+viewerPhotos.length:" · Waypoint"}</DialogDescription></DialogHeader>
     {viewed&&<div className="photo-viewer"><PhotoImage key={viewed.photo.url} photo={viewed.photo}/>{viewerPhotos.length>1&&<><button className="photo-prev" aria-label="Previous photograph" onClick={()=>nextPhoto(-1)}><ChevronLeft size={23}/></button><button className="photo-next" aria-label="Next photograph" onClick={()=>nextPhoto(1)}><ChevronRight size={23}/></button></>}</div>}
     {selection&&<div className="photo-info"><span><MapPin size={15}/>{selection.point.coordinates[1].toFixed(6)}°, {selection.point.coordinates[0].toFixed(6)}°</span>{selection.point.coordinates[2]!==undefined&&<span><Mountain size={15}/>{Math.round(selection.point.coordinates[2])} m</span>}<button onClick={()=>{map.current?.focus(selection.point);setSelection(null);}}><Crosshair size={15}/>Locate on map</button></div>}
-    {viewed&&selection&&access?.isOwner&&access.unlocked&&<Button variant="outline" onClick={()=>setConfirm("photo:"+selection.trip.id+":"+viewed.photo.url.split("/").pop())}><Trash2 size={15}/>Remove photo</Button>}
+    {viewed&&selection&&<Button variant="outline" onClick={()=>requestDelete("photo:"+selection.trip.id+":"+viewed.photo.url.split("/").pop())}><Trash2 size={15}/>Remove photo</Button>}
     {selection?.point.description&&<p className="waypoint-description">{selection.point.description}</p>}
    </DialogContent>
   </Dialog>
