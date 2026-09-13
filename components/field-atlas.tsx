@@ -17,7 +17,7 @@ import AtlasMap,{type MapHandle,type MapMode} from "./atlas-map";
 import UploadDialog from "./upload-dialog";
 import { api,jsonRequest,fileSize,apiUrl,assetUrl } from "@/lib/client-api";
 import type { Access,Trip,TripSummary,Waypoint,FieldPhoto,Project } from "@/lib/types";
-import { workspaceHash,workspaceFromHash,restoredProjectFiles,readPreference,writePreference,type WorkspaceId } from "@/lib/workspaces";
+import { workspacePath,workspaceFromPath,workspaceFromHash,restoredProjectFiles,readPreference,writePreference,type WorkspaceId } from "@/lib/workspaces";
 import "./field-atlas.css";
 
 function tripDate(s:string|null) {if(!s)return "No date added";return new Date(s+"T12:00:00").toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});}
@@ -54,7 +54,7 @@ export default function FieldAtlas() {
  const [summaries,setSummaries]=useState<TripSummary[]>([]),[cache,setCache]=useState<Record<string,Trip>>({}),[visible,setVisible]=useState<Set<string>>(new Set()),[selectedId,setSelectedId]=useState<string|null>(null);
  const [loading,setLoading]=useState(true),[loadError,setLoadError]=useState(""),[loadingTrip,setLoadingTrip]=useState<string|null>(null),[access,setAccess]=useState<Access|null>(null);
  const [mode,setMode]=useState<MapMode>("map"),[photosVisible,setPhotosVisible]=useState(true),[uploadOpen,setUploadOpen]=useState(false),[accessOpen,setAccessOpen]=useState(false),[panelOpen,setPanelOpen]=useState(false);
- const [activeWorkspace,setActiveWorkspace]=useState<WorkspaceId>(()=>workspaceFromHash(window.location.hash)||workspaceFromHash(readPreference("workspace")||"")||"field-map"),[detailOpen,setDetailOpen]=useState(false);
+ const [activeWorkspace,setActiveWorkspace]=useState<WorkspaceId>(()=>workspaceFromPath(window.location.pathname)||workspaceFromHash(window.location.hash)||workspaceFromHash(readPreference("workspace")||"")||"field-map"),[detailOpen,setDetailOpen]=useState(false);
  const [selection,setSelection]=useState<PhotoSelection|null>(null),[coords,setCoords]=useState({lng:34.4,lat:39.2,zoom:6.2}),[confirm,setConfirm]=useState<string|null>(null),[pendingDelete,setPendingDelete]=useState<string|null>(null),[removing,setRemoving]=useState(false);
  const [projects,setProjects]=useState<Project[]>([]),[uploadProject,setUploadProject]=useState<string|null>(null),[uploadPurpose,setUploadPurpose]=useState<"file"|"project">("file"),[loadingIds,setLoadingIds]=useState<Set<string>>(new Set());
  const [editing,setEditing]=useState<TripSummary|null>(null),[editProject,setEditProject]=useState(""),[editName,setEditName]=useState(""),[editAuthor,setEditAuthor]=useState(""),[editError,setEditError]=useState(""),[editBusy,setEditBusy]=useState(false);
@@ -99,16 +99,17 @@ export default function FieldAtlas() {
   setUploadProject(projectId);setUploadPurpose(purpose);setUploadOpen(true);
  }
  function changeWorkspace(workspace:WorkspaceId){
+  const target=workspacePath(workspace,import.meta.env.BASE_URL);
+  if(window.location.pathname!==target||window.location.hash)window.history.pushState(null,"",target);
   if(restoredWorkspace.current===workspace)return;
   restoreGeneration.current++;restoredWorkspace.current=null;
-  if(window.location.hash!==workspaceHash(workspace))window.history.pushState(null,"",workspaceHash(workspace));
   setActiveWorkspace(workspace);setSelectedId(null);selectedRef.current=null;setDetailOpen(false);setSelection(null);setPanelOpen(false);
  }
  useEffect(()=>{
-  const followLink=()=>{const workspace=workspaceFromHash(window.location.hash);if(workspace)changeWorkspace(workspace);};
-  window.addEventListener("hashchange",followLink);
-  if(!workspaceFromHash(window.location.hash))window.history.replaceState(null,"",workspaceHash(activeWorkspace));
-  return()=>window.removeEventListener("hashchange",followLink);
+  const followLink=()=>{const workspace=workspaceFromPath(window.location.pathname)||workspaceFromHash(window.location.hash);if(workspace)changeWorkspace(workspace);};
+  window.addEventListener("popstate",followLink);
+  if(window.location.hash)window.history.replaceState(null,"",workspacePath(activeWorkspace,import.meta.env.BASE_URL));
+  return()=>window.removeEventListener("popstate",followLink);
  },[]);
  useEffect(()=>{
   writePreference("workspace",workspaceHash(activeWorkspace));
@@ -223,7 +224,7 @@ export default function FieldAtlas() {
      <span className="header-gallery-label"><Camera size={15}/><span>Photos</span><small>{gallery.length}</small></span>
      <div className="header-gallery-scroll">{gallery.map(({trip,point,photo},i)=><button key={trip.id+":"+photo.id} className="header-photo-thumb" onClick={()=>setSelection({trip,point,photoId:photo.id})} aria-label={"Open photograph "+(i+1)+": "+point.name}><PhotoImage photo={photo}/><span>{point.name}</span></button>)}</div>
     </section>}
-    <div className="header-actions"><a className="workspace-share" href={workspaceHash(activeWorkspace)} onClick={async e=>{e.preventDefault();try{await navigator.clipboard.writeText(window.location.href.split("#")[0]+workspaceHash(activeWorkspace));toast.success("Workspace link copied.");}catch{toast.error("Copy the workspace link from your address bar.");}}} title="Copy workspace link" aria-label="Copy workspace link"><MapPinned size={17}/></a><span className="trip-total">{workspaceProjects.length} project{workspaceProjects.length!==1?"s":""} · {workspaceSummaries.length} files</span><Button className="wine-button" onClick={()=>openUpload(selectedSummary?.projectId||null)}><Upload size={17}/>Add file</Button></div>
+    <div className="header-actions"><a className="workspace-share" href={workspacePath(activeWorkspace,import.meta.env.BASE_URL)} onClick={async e=>{e.preventDefault();try{await navigator.clipboard.writeText(window.location.origin+workspacePath(activeWorkspace,import.meta.env.BASE_URL));toast.success("Workspace link copied.");}catch{toast.error("Copy the workspace link from your address bar.");}}} title="Copy workspace link" aria-label="Copy workspace link"><MapPinned size={17}/></a><span className="trip-total">{workspaceProjects.length} project{workspaceProjects.length!==1?"s":""} · {workspaceSummaries.length} files</span><Button className="wine-button" onClick={()=>openUpload(selectedSummary?.projectId||null)}><Upload size={17}/>Add file</Button></div>
    </header>
    <section className={"map-workspace "+(!panelOpen?"panel-is-closed":"")} aria-label="Field map workspace">
     <AtlasMap ref={map} trips={mapTrips} mode={mode} selectedId={selectedId} photosVisible={photosVisible} onPoint={(trip,point)=>setSelection({trip,point,photoId:point.photos[0]?.id})} onBackground={()=>setDetailOpen(false)} onMove={(lng,lat,zoom)=>setCoords({lng,lat,zoom})}/>
