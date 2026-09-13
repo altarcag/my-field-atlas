@@ -89,3 +89,19 @@
 @media(max-width:767px){.workspace-header{height:52px;padding:0 10px;gap:8px}.workspace-header h1{font-size:18px;line-height:1;margin:0}.heading-group{gap:6px}.mobile-nav-trigger{width:34px;height:34px}.breadcrumbs{display:none}.header-gallery{max-width:none;padding:5px;border-left:0;border-right:0}.header-photo-thumb{flex-basis:44px;height:34px}.header-photo-thumb>span,.header-gallery-label{display:none}.header-actions{gap:6px}.header-actions .wine-button{height:36px;padding:0 10px;font-size:13px}.header-actions .wine-button svg{width:15px;height:15px}.map-mode-wrap{top:10px;left:10px}.open-trip-panel{top:62px;left:10px;min-height:42px}}
 
 .delete-project-button{display:flex;align-items:center;gap:6px;color:#973950;font-size:12px;padding:6px 8px;margin:0 8px 6px auto;min-height:32px}.workspace-share{display:flex;align-items:center;justify-content:center;min-width:32px;min-height:36px;color:#77334b}.terrain-hint{max-width:300px;white-space:normal}@media(max-width:767px){.terrain-hint{display:none}}
+
+
+/* Mobile map controls: compact opposing toolbars keep the map unobstructed. */
+@media(max-width:767px){
+ .open-trip-panel{top:8px;left:8px;min-height:34px;height:34px;padding:0 9px;gap:6px;border-radius:7px;font-size:11px}
+ .open-trip-panel svg{width:14px;height:14px}
+ .open-trip-panel span{font-size:10px;margin-left:2px}
+ .map-mode-wrap{top:8px;right:8px;left:auto}
+ .map-modes{padding:3px;gap:1px!important;border-radius:7px}
+ .map-modes label{padding:6px 7px;gap:4px;border-radius:5px;font-size:11px}
+ .map-modes label svg{width:13px;height:13px}
+ .map-workspace .maplibregl-ctrl-top-right{top:55px;right:8px}
+ .map-workspace .maplibregl-ctrl-group button{width:32px;height:32px}
+ .fit-control{top:165px;right:8px;width:32px;height:32px;border-radius:7px}
+ .fit-control svg{width:16px;height:16px}
+}
