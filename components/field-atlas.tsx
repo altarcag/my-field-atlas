@@ -55,7 +55,7 @@ export default function FieldAtlas() {
  const [loading,setLoading]=useState(true),[loadError,setLoadError]=useState(""),[loadingTrip,setLoadingTrip]=useState<string|null>(null),[access,setAccess]=useState<Access|null>(null);
  const [mode,setMode]=useState<MapMode>("map"),[photosVisible,setPhotosVisible]=useState(true),[uploadOpen,setUploadOpen]=useState(false),[accessOpen,setAccessOpen]=useState(false),[panelOpen,setPanelOpen]=useState(false);
  const [activeWorkspace,setActiveWorkspace]=useState<WorkspaceId>(()=>workspaceFromHash(window.location.hash)||workspaceFromHash(readPreference("workspace")||"")||"field-map"),[detailOpen,setDetailOpen]=useState(false);
- const [selection,setSelection]=useState<PhotoSelection|null>(null),[coords,setCoords]=useState({lng:34.4,lat:39.2,zoom:6.2}),[confirm,setConfirm]=useState<string|null>(null),[removing,setRemoving]=useState(false);
+ const [selection,setSelection]=useState<PhotoSelection|null>(null),[coords,setCoords]=useState({lng:34.4,lat:39.2,zoom:6.2}),[confirm,setConfirm]=useState<string|null>(null),[pendingDelete,setPendingDelete]=useState<string|null>(null),[removing,setRemoving]=useState(false);
  const [projects,setProjects]=useState<Project[]>([]),[uploadProject,setUploadProject]=useState<string|null>(null),[uploadPurpose,setUploadPurpose]=useState<"file"|"project">("file"),[loadingIds,setLoadingIds]=useState<Set<string>>(new Set());
  const [editing,setEditing]=useState<TripSummary|null>(null),[editProject,setEditProject]=useState(""),[editName,setEditName]=useState(""),[editAuthor,setEditAuthor]=useState(""),[editError,setEditError]=useState(""),[editBusy,setEditBusy]=useState(false);
  const map=useRef<MapHandle>(null),cacheRef=useRef(cache),inflight=useRef(new Map<string,Promise<Trip>>()),selectedRef=useRef(selectedId);
@@ -159,7 +159,7 @@ export default function FieldAtlas() {
   if(access?.isOwner&&access.unlocked){setConfirm(target);return;}
   try {
    if(access?.unlocked){await api("/api/access",jsonRequest({action:"lock"}));setAccess(await api<Access>("/api/access"));}
-   toast.info("Enter the owner password, then click delete again.");
+   setPendingDelete(target);toast.info("Enter the owner password to continue.");
    openUpload();
   }catch(e){toast.error((e as Error).message);}
  }
@@ -263,7 +263,7 @@ export default function FieldAtlas() {
     <div className="map-bottom-left"><span className="coordinates">{Math.abs(coords.lat).toFixed(4)}° {coords.lat>=0?"N":"S"}<span>/</span>{Math.abs(coords.lng).toFixed(4)}° {coords.lng>=0?"E":"W"}</span><span className="coordinate-system">WGS 84</span></div>
    </section>
   </main>
-  <UploadDialog open={uploadOpen} onOpenChange={setUploadOpen} access={access} onAccess={setAccess} onSaved={saved} projects={projects} preferredProjectId={uploadProject} purpose={uploadPurpose} onProjectSaved={projectSaved}/>
+  <UploadDialog open={uploadOpen} onOpenChange={open=>{setUploadOpen(open);if(!open)setPendingDelete(null);}} access={access} onAccess={next=>{setAccess(next);if(pendingDelete&&next.isOwner){setUploadOpen(false);setConfirm(pendingDelete);setPendingDelete(null);}else if(pendingDelete&&next.unlocked)toast.error("Deletion requires the owner password.");}} onSaved={saved} projects={projects} preferredProjectId={uploadProject} purpose={uploadPurpose} onProjectSaved={projectSaved}/>
   <Dialog open={!!editing} onOpenChange={open=>{if(!open&&!editBusy)setEditing(null);}}><DialogContent className="atlas-dialog"><DialogHeader><DialogTitle>Edit file details</DialogTitle><DialogDescription>Choose its project and the author displayed beside this file.</DialogDescription></DialogHeader>
    <form className="dialog-form" onSubmit={saveFileDetails}>
     <label className="field-label">Project<NativeSelect required value={editProject} disabled={editBusy} onChange={e=>setEditProject(e.target.value)}><option value="" disabled>Choose a project</option>{projects.map(project=><option key={project.id} value={project.id}>{project.name}</option>)}</NativeSelect></label>
