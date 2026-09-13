@@ -1,9 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {workspaceHash,workspaceFromHash,restoredProjectFiles} from '../.sites-runtime/check-modules/workspaces.mjs';
+import {workspacePath,workspaceFromPath,workspaceHash,workspaceFromHash,restoredProjectFiles} from '../.sites-runtime/check-modules/workspaces.mjs';
 const projects=[{id:'a',name:'Other trip'},{id:'u',name:'URG-2026'}];
 const files=[{id:'a1',projectId:'a'},{id:'u1',projectId:'u'},{id:'u2',projectId:'u'}];
-test('workspace links round trip and unknown links have no workspace',()=>{
+test('clean workspace paths resolve without hashes',()=>{
+ assert.equal(workspacePath('field-map'),'/my-field-atlas/');
+ assert.equal(workspacePath('urg-2026'),'/my-field-atlas/urg-2026/');
+ assert.equal(workspaceFromPath('/my-field-atlas/'),'field-map');
+ assert.equal(workspaceFromPath('/my-field-atlas/urg-2026/'),'urg-2026');
+ assert.equal(workspaceFromPath('/other'),null);
+});
+test('legacy hash links remain readable',()=>{
  for(const id of ['field-map','urg-2026'])assert.equal(workspaceFromHash(workspaceHash(id)),id);
  assert.equal(workspaceFromHash('#other'),null);
 });
