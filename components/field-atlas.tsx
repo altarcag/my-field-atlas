@@ -155,10 +155,13 @@ export default function FieldAtlas() {
   if(trip.projectId)writePreference("project:"+activeWorkspace,trip.projectId);
   await chooseTrip(trip.id);setPanelOpen(true);toast.success("File saved in its project. Your map is ready.");
  }
- function requestDelete(target:string) {
+ async function requestDelete(target:string) {
   if(access?.isOwner&&access.unlocked){setConfirm(target);return;}
-  toast.info("Enter the owner password to delete items.");
-  openUpload();
+  try {
+   if(access?.unlocked){await api("/api/access",jsonRequest({action:"lock"}));setAccess(await api<Access>("/api/access"));}
+   toast.info("Enter the owner password, then click delete again.");
+   openUpload();
+  }catch(e){toast.error((e as Error).message);}
  }
  async function removeConfirmed() {
   if(!confirm)return;setRemoving(true);
