@@ -18,6 +18,7 @@ import UploadDialog from "./upload-dialog";
 import { api,jsonRequest,fileSize,apiUrl,assetUrl } from "@/lib/client-api";
 import type { Access,Trip,TripSummary,Waypoint,FieldPhoto,Project } from "@/lib/types";
 import { workspacePath,workspaceFromPath,workspaceHash,workspaceFromHash,restoredProjectFiles,readPreference,writePreference,type WorkspaceId } from "@/lib/workspaces";
+import type { PhotoPoint } from "@/lib/photo-groups";
 import "./field-atlas.css";
 
 function tripDate(s:string|null) {if(!s)return "No date added";return new Date(s+"T12:00:00").toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});}
@@ -49,7 +50,7 @@ function Navigation({access,onAccess,activeWorkspace,onWorkspace}:{access:Access
   </SidebarFooter>
  </Sidebar>;
 }
-type PhotoSelection={trip:Trip;point:Waypoint;photoId?:string};
+type PhotoSelection={trip:Trip;point:Waypoint;photoId?:string;group?:PhotoPoint[]};
 export default function FieldAtlas() {
  const [summaries,setSummaries]=useState<TripSummary[]>([]),[cache,setCache]=useState<Record<string,Trip>>({}),[visible,setVisible]=useState<Set<string>>(new Set()),[selectedId,setSelectedId]=useState<string|null>(null);
  const [loading,setLoading]=useState(true),[loadError,setLoadError]=useState(""),[loadingTrip,setLoadingTrip]=useState<string|null>(null),[access,setAccess]=useState<Access|null>(null);
@@ -187,13 +188,16 @@ export default function FieldAtlas() {
    setConfirm(null);
   }catch(e){toast.error((e as Error).message);}finally{setRemoving(false);}
  }
- const viewerPhotos=selection?.trip.points.flatMap(point=>point.photos.map(photo=>({point,photo})))||[];
- const viewerIndex=Math.max(0,viewerPhotos.findIndex(p=>p.photo.id===selection?.photoId));
+ const viewerPhotos=selection
+  ? (selection.group || selection.trip.points.map(point=>({trip:selection.trip,point})))
+    .flatMap(({trip,point})=>point.photos.map(photo=>({trip,point,photo})))
+  : [];
+ const viewerIndex=Math.max(0,viewerPhotos.findIndex(p=>p.photo.id===selection?.photoId&&p.trip.id===selection?.trip.id&&p.point.id===selection?.point.id));
  const viewed=selection?.photoId?viewerPhotos[viewerIndex]:null;
  function nextPhoto(delta:number) {
   if(!selection||!viewerPhotos.length)return;
   const next=viewerPhotos[(viewerIndex+delta+viewerPhotos.length)%viewerPhotos.length];
-  setSelection({trip:selection.trip,point:next.point,photoId:next.photo.id});
+  setSelection({trip:next.trip,point:next.point,photoId:next.photo.id,group:selection.group});
  }
  const nextPhotoRef=useRef(nextPhoto);nextPhotoRef.current=nextPhoto;
  useEffect(()=>{
@@ -227,7 +231,7 @@ export default function FieldAtlas() {
     <div className="header-actions"><span className="trip-total">{workspaceProjects.length} project{workspaceProjects.length!==1?"s":""} · {workspaceSummaries.length} files</span><Button className="wine-button" onClick={()=>openUpload(selectedSummary?.projectId||null)}><Upload size={17}/>Add file</Button></div>
    </header>
    <section className={"map-workspace "+(!panelOpen?"panel-is-closed":"")} aria-label="Field map workspace">
-    <AtlasMap ref={map} trips={mapTrips} mode={mode} selectedId={selectedId} photosVisible={photosVisible} onPoint={(trip,point)=>setSelection({trip,point,photoId:point.photos[0]?.id})} onBackground={()=>setDetailOpen(false)} onMove={(lng,lat,zoom)=>setCoords({lng,lat,zoom})}/>
+    <AtlasMap ref={map} trips={mapTrips} mode={mode} selectedId={selectedId} photosVisible={photosVisible} onPoint={(trip,point,group)=>setSelection({trip,point,photoId:point.photos[0]?.id,group})} onBackground={()=>setDetailOpen(false)} onMove={(lng,lat,zoom)=>setCoords({lng,lat,zoom})}/>
     <div className="map-mode-wrap">
      <RadioGroup value={mode} onValueChange={v=>setMode(v as MapMode)} className="map-modes" orientation="horizontal" aria-label="Map layer">
       {([{value:"map",label:"Map",Icon:MapIcon},{value:"satellite",label:"Satellite",Icon:Satellite},{value:"terrain",label:"3D terrain",Icon:Mountain}] as const).map(({value,label,Icon})=><label key={value} className={mode===value?"chosen":""}><RadioGroupItem value={value} className="sr-only"/><Icon size={17}/><span>{label}</span></label>)}

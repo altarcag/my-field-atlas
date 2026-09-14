@@ -5,11 +5,12 @@ import type { FeatureCollection, Feature, Geometry } from "geojson";
 import { AlertCircle, LoaderCircle, RotateCcw } from "lucide-react";
 import { apiUrl } from "@/lib/client-api";
 import type { Trip, Waypoint } from "@/lib/types";
+import { groupMapPhotos, type PhotoPoint } from "@/lib/photo-groups";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 export type MapMode="map"|"satellite"|"terrain";
 export type MapHandle={fit:(trips?:Trip[])=>void;focus:(point:Waypoint)=>void};
-type Props={trips:Trip[];mode:MapMode;selectedId:string|null;photosVisible:boolean;onPoint:(trip:Trip,point:Waypoint)=>void;onBackground:()=>void;onMove:(lng:number,lat:number,zoom:number)=>void};
+type Props={trips:Trip[];mode:MapMode;selectedId:string|null;photosVisible:boolean;onPoint:(trip:Trip,point:Waypoint,group?:PhotoPoint[])=>void;onBackground:()=>void;onMove:(lng:number,lat:number,zoom:number)=>void};
 const EMPTY:FeatureCollection={type:"FeatureCollection",features:[]};
 export const BASE_STYLE:StyleSpecification={
  version:8,
@@ -85,18 +86,25 @@ const AtlasMap=forwardRef<MapHandle,Props>(function AtlasMap(props,ref) {
  useEffect(()=>{
   const map=mapRef.current,MarkerClass=markerClass.current;if(!ready||!map||!MarkerClass)return;
   markers.current.forEach(marker=>marker.remove());markers.current=[];
-  for(const trip of props.trips)for(const point of trip.points){
+  const entries = [
+   ...props.trips.flatMap(trip=>trip.points.filter(point=>!point.photos.length)
+    .map(point=>({trip,point,count:0,members:undefined as PhotoPoint[]|undefined}))),
+   ...(props.photosVisible ? groupMapPhotos(props.trips).map(group=>({
+    ...group.members[0],count:group.count,members:group.members,
+   })) : []),
+  ];
+  for(const {trip,point,count:photoCount,members} of entries){
    const photo=point.photos[0];if(photo&&!props.photosVisible)continue;
    let marker:Marker;
    if(photo){
     const shell=document.createElement("div");shell.className="map-photo-marker";shell.style.setProperty("--marker-color",trip.color);
     const button=document.createElement("button");button.type="button";button.className="map-photo-button";
-    button.setAttribute("aria-label",`Open photo: ${point.name} · ${trip.name}`);button.title=point.name+" · "+trip.name;
+    button.setAttribute("aria-label",`Open photo: ${point.name} · ${trip.name}`);button.title=point.name+" · "+trip.name+(photoCount>1?` · ${photoCount} nearby photos`:"");
     const image=document.createElement("img");image.src=apiUrl(photo.url);image.alt=photo.name;image.loading="lazy";image.decoding="async";
     image.addEventListener("error",()=>{image.remove();const fallback=document.createElement("span");fallback.className="map-photo-fallback";fallback.textContent="Photo";button.insertBefore(fallback,button.firstChild);},{once:true});
     button.appendChild(image);
-    if(point.photos.length>1){const count=document.createElement("span");count.className="map-photo-count";count.textContent=String(point.photos.length);button.appendChild(count);}
-    button.addEventListener("click",e=>{e.stopPropagation();latest.current.onPoint(trip,point);});shell.appendChild(button);
+    if(photoCount>1){const count=document.createElement("span");count.className="map-photo-count";count.textContent=String(photoCount);button.appendChild(count);}
+    button.addEventListener("click",e=>{e.stopPropagation();latest.current.onPoint(trip,point,members);});shell.appendChild(button);
     marker=new MarkerClass({element:shell,anchor:"bottom",subpixelPositioning:true});
    }else{
     marker=new MarkerClass({color:trip.color,scale:.85});const element=marker.getElement();
