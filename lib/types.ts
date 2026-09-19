@@ -3,7 +3,7 @@ export type Route = { name: string; coordinates: Coordinate[] };
 export type FieldPhoto = { id: string; url: string; name: string };
 export type Waypoint = { id: string; name: string; description: string; coordinates: Coordinate; photos: FieldPhoto[]; time?: string };
 export type TripData = { routes: Route[]; points: Waypoint[]; warnings: string[] };
-export type Project = { id: string; name: string; createdAt: string };
+export type Project = { id: string; name: string; createdAt: string; workspace?: "field-map" | "urg-2026" };
 // A Trip is one imported file; a project can contain any number of these files.
 export type TripSummary = { id: string; projectId: string | null; author: string; name: string; date: string | null; note: string; color: string; distance: number; routeCount: number; pointCount: number; photoCount: number; fileName: string; size: number; createdAt: string; archive?: boolean; cover?: string; sourceUrl?: string };
 export type Trip = TripSummary & TripData;

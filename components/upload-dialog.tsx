@@ -7,19 +7,20 @@ import { RadioGroup,RadioGroupItem } from "@/components/ui/radio-group";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Button } from "@/components/ui/button";
 import { api,fileSize,jsonRequest } from "@/lib/client-api";
+import type { WorkspaceId } from "@/lib/workspaces";
 import type { PreparedImport } from "@/lib/kmz";
 import { ROUTE_COLORS,type Access,type TripSummary,type Project } from "@/lib/types";
 
-type Props={open:boolean;onOpenChange:(v:boolean)=>void;access:Access|null;onAccess:(a:Access)=>void;onSaved:(trip:TripSummary)=>Promise<void>;projects:Project[];preferredProjectId:string|null;purpose:"file"|"project";onProjectSaved:(project:Project)=>void};
-export default function UploadDialog({open,onOpenChange,access,onAccess,onSaved,projects,preferredProjectId,purpose,onProjectSaved}:Props) {
+type Props={workspace:WorkspaceId;open:boolean;onOpenChange:(v:boolean)=>void;access:Access|null;onAccess:(a:Access)=>void;onSaved:(trip:TripSummary)=>Promise<void>;projects:Project[];preferredProjectId:string|null;purpose:"file"|"project";onProjectSaved:(project:Project)=>void};
+export default function UploadDialog({workspace,open,onOpenChange,access,onAccess,onSaved,projects,preferredProjectId,purpose,onProjectSaved}:Props) {
  const [file,setFile]=useState<File|null>(null),[prepared,setPrepared]=useState<PreparedImport|null>(null),[name,setName]=useState(""),[date,setDate]=useState(""),[note,setNote]=useState(""),[color,setColor]=useState(ROUTE_COLORS[0]);
  const [password,setPassword]=useState(""),[error,setError]=useState(""),[busy,setBusy]=useState(false),[reading,setReading]=useState(false),[status,setStatus]=useState(""),[progress,setProgress]=useState(0),[dragging,setDragging]=useState(false);
  const input=useRef<HTMLInputElement>(null),controller=useRef<AbortController|null>(null),activeId=useRef<string|null>(null),readGeneration=useRef(0);
  const [projectId,setProjectId]=useState("__new__"),[projectName,setProjectName]=useState(""),[author,setAuthor]=useState("");
- useEffect(()=>{if(open){setProjectId(preferredProjectId||projects[0]?.id||"__new__");setProjectName("");setError("");}},[open,preferredProjectId,purpose]);
+ useEffect(()=>{if(open){setProjectId(preferredProjectId||projects[0]?.id||"__new__");setProjectName("");setError("");}},[open,preferredProjectId,purpose,workspace]);
  const locked=!access?.unlocked;
  async function createProject(){
-  const project=await api<Project>("/api/projects",jsonRequest({name:projectName.trim()}));
+  const project=await api<Project>("/api/projects",jsonRequest({name:projectName.trim(),workspace}));
   onProjectSaved(project);setProjectId(project.id);return project.id;
  }
  async function saveProject(e:React.FormEvent){
@@ -97,7 +98,7 @@ export default function UploadDialog({open,onOpenChange,access,onAccess,onSaved,
     </>}
    </form>:purpose==="project"?<form onSubmit={saveProject} className="dialog-form">
     <label className="field-label">Project name<input autoFocus required maxLength={120} disabled={busy} value={projectName} onChange={e=>setProjectName(e.target.value)} placeholder="e.g. URG-2026"/></label>
-    <p className="small-note">Add Day 1, Day 2, and more as separate files inside this project.</p>
+    <p className="small-note">Workspace: {workspace==="urg-2026"?"URG-2026":"My Field Map"}. Add Day 1, Day 2, and more as separate files inside this project.</p>
     {error&&<p className="form-error" role="alert">{error}</p>}
     <div className="dialog-actions"><Button type="button" variant="outline" disabled={busy} onClick={()=>onOpenChange(false)}>Cancel</Button><Button type="submit" className="wine-button" disabled={busy||!projectName.trim()}>{busy?<LoaderCircle size={16} className="spin"/>:<FolderPlus size={16}/>}Create project</Button></div>
    </form>:<form onSubmit={save} className="dialog-form">

@@ -17,7 +17,7 @@ import AtlasMap,{type MapHandle,type MapMode} from "./atlas-map";
 import UploadDialog from "./upload-dialog";
 import { api,jsonRequest,fileSize,apiUrl,assetUrl } from "@/lib/client-api";
 import type { Access,Trip,TripSummary,Waypoint,FieldPhoto,Project } from "@/lib/types";
-import { workspacePath,workspaceFromPath,workspaceHash,workspaceFromHash,restoredProjectFiles,readPreference,writePreference,type WorkspaceId } from "@/lib/workspaces";
+import { projectsInWorkspace,workspaceUploadProject,workspacePath,workspaceFromPath,workspaceHash,workspaceFromHash,restoredProjectFiles,readPreference,writePreference,type WorkspaceId } from "@/lib/workspaces";
 import type { PhotoPoint } from "@/lib/photo-groups";
 import "./field-atlas.css";
 
@@ -62,8 +62,8 @@ export default function FieldAtlas() {
  const map=useRef<MapHandle>(null),cacheRef=useRef(cache),inflight=useRef(new Map<string,Promise<Trip>>()),selectedRef=useRef(selectedId);
  cacheRef.current=cache;selectedRef.current=selectedId;
  const restoredWorkspace=useRef<WorkspaceId|null>(null),restoreGeneration=useRef(0);
- const urgProjectIds=useMemo(()=>new Set(projects.filter(project=>project.name.trim().toLocaleLowerCase()==="urg-2026").map(project=>project.id)),[projects]);
- const workspaceProjects=useMemo(()=>activeWorkspace==="field-map"?projects:projects.filter(project=>urgProjectIds.has(project.id)),[activeWorkspace,projects,urgProjectIds]);
+ const workspaceProjects=useMemo(()=>projectsInWorkspace(activeWorkspace,projects),[activeWorkspace,projects]);
+ const urgProjectIds=useMemo(()=>new Set(projectsInWorkspace("urg-2026",projects).map(project=>project.id)),[projects]);
  const workspaceSummaries=useMemo(()=>activeWorkspace==="field-map"?summaries:summaries.filter(file=>file.projectId&&urgProjectIds.has(file.projectId)),[activeWorkspace,summaries,urgProjectIds]);
  const groups=useMemo(()=>groupFiles(workspaceProjects,workspaceSummaries),[workspaceProjects,workspaceSummaries]);
  const visibleRef=useRef(visible);visibleRef.current=visible;
@@ -97,7 +97,7 @@ export default function FieldAtlas() {
  useEffect(()=>{void load();},[load]);
  useEffect(()=>{const lock=()=>setAccess({configured:true,unlocked:false,isOwner:false});window.addEventListener("atlas-session-expired",lock);return()=>window.removeEventListener("atlas-session-expired",lock);},[]);
  function openUpload(projectId:string|null=null,purpose:"file"|"project"="file"){
-  setUploadProject(projectId);setUploadPurpose(purpose);setUploadOpen(true);
+  setUploadProject(workspaceUploadProject(activeWorkspace,projects,projectId));setUploadPurpose(purpose);setUploadOpen(true);
  }
  function changeWorkspace(workspace:WorkspaceId){
   const target=workspacePath(workspace,import.meta.env.BASE_URL);
@@ -130,7 +130,7 @@ export default function FieldAtlas() {
    map.current?.fit(loaded.filter(file=>visibleRef.current.has(file.id)));
   });
  },[activeWorkspace,loading,loadError,projects,summaries,ensureTrip]);
- function projectSaved(project:Project){setProjects(previous=>[project,...previous.filter(p=>p.id!==project.id)]);toast.success("Project created. Add as many files as you need.");}
+ function projectSaved(project:Project){setPanelOpen(true);writePreference("project:"+activeWorkspace,project.id);setProjects(previous=>[project,...previous.filter(p=>p.id!==project.id)]);toast.success("Project created. Add as many files as you need.");}
  async function toggleFiles(files:TripSummary[],show:boolean){
   if(show&&files[0]?.projectId)writePreference("project:"+activeWorkspace,files[0].projectId);
   setVisible(previous=>{const next=new Set(previous);for(const file of files){if(show)next.add(file.id);else next.delete(file.id);}return next;});
@@ -268,7 +268,7 @@ export default function FieldAtlas() {
     <div className="map-bottom-left"><span className="coordinates">{Math.abs(coords.lat).toFixed(4)}° {coords.lat>=0?"N":"S"}<span>/</span>{Math.abs(coords.lng).toFixed(4)}° {coords.lng>=0?"E":"W"}</span><span className="coordinate-system">WGS 84</span></div>
    </section>
   </main>
-  <UploadDialog open={uploadOpen} onOpenChange={open=>{setUploadOpen(open);if(!open)setPendingDelete(null);}} access={access} onAccess={next=>{setAccess(next);if(pendingDelete&&next.isOwner){setUploadOpen(false);setConfirm(pendingDelete);setPendingDelete(null);}else if(pendingDelete&&next.unlocked)toast.error("Deletion requires the owner password.");}} onSaved={saved} projects={projects} preferredProjectId={uploadProject} purpose={uploadPurpose} onProjectSaved={projectSaved}/>
+  <UploadDialog workspace={activeWorkspace} open={uploadOpen} onOpenChange={open=>{setUploadOpen(open);if(!open)setPendingDelete(null);}} access={access} onAccess={next=>{setAccess(next);if(pendingDelete&&next.isOwner){setUploadOpen(false);setConfirm(pendingDelete);setPendingDelete(null);}else if(pendingDelete&&next.unlocked)toast.error("Deletion requires the owner password.");}} onSaved={saved} projects={workspaceProjects} preferredProjectId={uploadProject} purpose={uploadPurpose} onProjectSaved={projectSaved}/>
   <Dialog open={!!editing} onOpenChange={open=>{if(!open&&!editBusy)setEditing(null);}}><DialogContent className="atlas-dialog"><DialogHeader><DialogTitle>Edit file details</DialogTitle><DialogDescription>Choose its project and the author displayed beside this file.</DialogDescription></DialogHeader>
    <form className="dialog-form" onSubmit={saveFileDetails}>
     <label className="field-label">Project<NativeSelect required value={editProject} disabled={editBusy} onChange={e=>setEditProject(e.target.value)}><option value="" disabled>Choose a project</option>{projects.map(project=><option key={project.id} value={project.id}>{project.name}</option>)}</NativeSelect></label>
@@ -284,6 +284,7 @@ export default function FieldAtlas() {
     <DialogHeader><DialogTitle>{selection?.point.name||"Field photograph"}</DialogTitle><DialogDescription>{selection?.trip.name}{viewed?" · Photograph "+(viewerIndex+1)+" of "+viewerPhotos.length:" · Waypoint"}</DialogDescription></DialogHeader>
     {viewed&&<div className="photo-viewer"><PhotoImage key={viewed.photo.url} photo={viewed.photo}/>{viewerPhotos.length>1&&<><button className="photo-prev" aria-label="Previous photograph" onClick={()=>nextPhoto(-1)}><ChevronLeft size={23}/></button><button className="photo-next" aria-label="Next photograph" onClick={()=>nextPhoto(1)}><ChevronRight size={23}/></button></>}</div>}
     {selection&&<div className="photo-info"><span><MapPin size={15}/>{selection.point.coordinates[1].toFixed(6)}°, {selection.point.coordinates[0].toFixed(6)}°</span>{selection.point.coordinates[2]!==undefined&&<span><Mountain size={15}/>{Math.round(selection.point.coordinates[2])} m</span>}<button onClick={()=>{map.current?.focus(selection.point);setSelection(null);}}><Crosshair size={15}/>Locate on map</button></div>}
+    {viewed&&<a className="text-button" href={apiUrl(viewed.photo.url)+"?download=1&name="+encodeURIComponent(viewed.photo.name)}><Download size={15}/>Download photo</a>}
     {viewed&&selection&&<Button variant="outline" onClick={()=>requestDelete("photo:"+selection.trip.id+":"+viewed.photo.url.split("/").pop())}><Trash2 size={15}/>Remove photo</Button>}
     {selection?.point.description&&<p className="waypoint-description">{selection.point.description}</p>}
    </DialogContent>

@@ -9,7 +9,7 @@ export const atlasAttempts = sqliteTable('atlas_attempts', {
  key: text('key').primaryKey(), count: integer('count').notNull(), expires: integer('expires').notNull(),
 });
 export const atlasProjects = sqliteTable('atlas_projects', {
- id: text('id').primaryKey(), name: text('name').notNull(), createdAt: text('created_at').notNull(),
+ id: text('id').primaryKey(), name: text('name').notNull(), workspace: text('workspace').notNull().default('field-map'), createdAt: text('created_at').notNull(),
 }, table => [uniqueIndex('idx_atlas_projects_name').on(table.name)]);
 export const atlasTrips = sqliteTable('atlas_trips', {
  projectId: text('project_id').references(() => atlasProjects.id), author: text('author').notNull().default(''),

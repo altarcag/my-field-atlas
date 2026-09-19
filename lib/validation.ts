@@ -16,5 +16,5 @@ export const beginSchema=z.object({
  note:z.string().max(2000),color:z.string().regex(/^#[a-fA-F0-9]{6}$/),fileName:z.string().max(250).regex(/\.(kmz|kml)$/i),
  size:z.number().int().min(1).max(512*1024*1024),
 }).refine(d=>!/\.kml$/i.test(d.fileName)||d.size<=12*1024*1024,"KML documents must be smaller than 12 MB.");
-export const projectSchema=z.object({name:z.string().trim().min(1).max(120)});
+export const projectSchema=z.object({name:z.string().trim().min(1).max(120),workspace:z.enum(["field-map","urg-2026"]).optional()});
 export const fileDetailsSchema=z.object({projectId:z.string().uuid(),name:z.string().trim().min(1).max(120),author:z.string().trim().max(120)});

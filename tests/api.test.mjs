@@ -8,6 +8,7 @@ import * as trips from "../.sites-runtime/check-modules/api-trips.mjs";
 import * as file from "../.sites-runtime/check-modules/api-file.mjs";
 import * as archive from "../.sites-runtime/check-modules/api-archive.mjs";
 import * as photo from "../.sites-runtime/check-modules/api-photo.mjs";
+import * as filesApi from "../.sites-runtime/check-modules/api-files.mjs";
 import * as complete from "../.sites-runtime/check-modules/api-complete.mjs";
 const origin="https://field-atlas.test";
 let token="";
@@ -34,6 +35,11 @@ test("migrate existing uploads, enforce the fixed password, and save multiple fi
  assert.ok(token);assert.equal(unlock.headers.get("Set-Cookie"),null,"cross-site access must not rely on third-party cookies");
  const project=await jsonOk(await projects.POST(request("/api/projects",{name:"URG-2026"})));
  assert.equal((await projects.POST(request("/api/projects",{name:"URG-2026"}))).status,409);
+ assert.equal(project.workspace,"urg-2026");
+ const namedProject=await jsonOk(await projects.POST(request("/api/projects",{name:"Rhine outcrops",workspace:"urg-2026"})));
+ assert.equal(namedProject.workspace,"urg-2026");
+ assert.equal((await jsonOk(await projects.GET())).projects.find(p=>p.id===namedProject.id).workspace,"urg-2026");
+ assert.equal((await projects.POST(request("/api/projects",{name:"Invalid",workspace:"invalid"}))).status,400);
  const ids=[];
  for(const day of [1,2]){
   const metadata={projectId:project.id,name:"Day "+day,author:day===1?"Altar":"Friend",date:null,note:"",color:"#b6324d",fileName:day===1?"day1.kmz":"day2.kml",size:4};
@@ -46,6 +52,14 @@ test("migrate existing uploads, enforce the fixed password, and save multiple fi
   assert.equal(saved.projectId,project.id);assert.equal(saved.author,metadata.author);assert.equal(saved.pointCount,2);assert.equal(saved.photoCount,1);assert.equal(saved.routeCount,0);
   const loaded=await jsonOk(await file.GET(request("/api/trips/"+id,undefined,"GET"),context(id)));
   assert.deepEqual(loaded.points,data.points);
+  const photoCtx={params:Promise.resolve({id,path:["photos","p0.jpg"]})};
+  const inline=await filesApi.GET(new Request(origin+photoUrl),photoCtx);
+  assert.equal(inline.status,200);
+  assert.equal(inline.headers.get("Content-Disposition"),null);
+  const download=await filesApi.GET(new Request(origin+photoUrl+"?download=1&name=Outcrop%20photo.png"),photoCtx);
+  assert.equal(download.status,200);
+  assert.equal(download.headers.get("Content-Disposition"),"attachment; filename*=UTF-8''Outcrop%20photo.jpg");
+  assert.deepEqual(new Uint8Array(await download.arrayBuffer()),new Uint8Array([255,216,255,217]));
  }
  assert.equal((await jsonOk(await trips.GET())).trips.filter(item=>item.projectId===project.id).length,2);
  const moved=await jsonOk(await file.PATCH(request("/api/trips/"+legacyId,{projectId:project.id,name:"Early test",author:"Altar"},"PATCH"),context(legacyId)));
@@ -65,7 +79,8 @@ test("migrate existing uploads, enforce the fixed password, and save multiple fi
  assert.ok(await env.BUCKET.head("trips/"+ids[1]+"/original"),"original archive retained");
  assert.equal((await photo.DELETE(request("/api/trips/"+ids[1]+"/photos/p0.jpg",undefined,"DELETE"),photoContext)).status,404);
  await jsonOk(await projects.DELETE(request("/api/projects?id="+project.id,undefined,"DELETE")));
- assert.equal((await jsonOk(await projects.GET())).projects.length,0);
+ assert.deepEqual((await jsonOk(await projects.GET())).projects.map(p=>p.id),[namedProject.id]);
+ await jsonOk(await projects.DELETE(request("/api/projects?id="+namedProject.id,undefined,"DELETE")));
  assert.equal((await env.BUCKET.list({prefix:"trips/"+ids[1]+"/"})).objects.length,0);
  assert.equal(sqlite.prepare("SELECT * FROM atlas_trips WHERE project_id=?").all(project.id).length,0);
  await jsonOk(await access.POST(request("/api/access",{action:"lock"})));
