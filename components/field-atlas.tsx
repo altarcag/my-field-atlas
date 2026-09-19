@@ -46,7 +46,7 @@ function Navigation({access,onAccess,activeWorkspace,onWorkspace}:{access:Access
   </SidebarContent>
   <SidebarFooter className="nav-footer">
    <button className="access-nav" onClick={()=>{setOpenMobile(false);onAccess();}}>{access?.unlocked?<Unlock size={18}/>:<LockKeyhole size={18}/>}<span><strong>Upload access</strong><small>{access?.unlocked?"Uploads enabled":"Password protected"}</small></span><ChevronRight size={15}/></button>
-   <div className="workspace-credit"><span className="avatar">A</span><span>Personal field notebook<small>MY FIELD ATLAS · V2</small></span></div>
+   <a className="workspace-credit" href="https://github.com/altarcag" target="_blank" rel="noopener noreferrer" aria-label="Taha Altar Çağ on GitHub (opens in a new tab)"><img className="avatar" src="https://avatars.githubusercontent.com/u/26670231?v=4" alt="" width={31} height={31} loading="lazy"/><span>Taha Altar Çağ<small>@altarcag · GitHub ↗</small></span></a>
   </SidebarFooter>
  </Sidebar>;
 }

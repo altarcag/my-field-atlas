@@ -105,3 +105,9 @@
  .fit-control{top:165px;right:8px;width:32px;height:32px;border-radius:7px}
  .fit-control svg{width:16px;height:16px}
 }
+
+/* Linked author credit in the desktop navigation footer. */
+a.workspace-credit{text-decoration:none;border-radius:8px;transition:color .15s ease}
+a.workspace-credit:hover{color:#fff}
+a.workspace-credit:focus-visible{outline:2px solid #f0dce4;outline-offset:5px}
+a.workspace-credit .avatar{object-fit:cover;flex-shrink:0}
