@@ -8,7 +8,7 @@ export type Project = { id: string; name: string; createdAt: string; workspace?:
 export type TripSummary = { id: string; projectId: string | null; author: string; name: string; date: string | null; note: string; color: string; distance: number; routeCount: number; pointCount: number; photoCount: number; fileName: string; size: number; createdAt: string; archive?: boolean; cover?: string; sourceUrl?: string };
 export type Trip = TripSummary & TripData;
 export type Access = { configured: boolean; unlocked: boolean; isOwner: boolean };
-export const ROUTE_COLORS = ["#b6324d", "#d17f3c", "#347f91", "#7165aa", "#647d40", "#bd596c", "#4279bd"];
+export const ROUTE_COLORS = ["#b6324d", "#d17f3c", "#347f91", "#7165aa", "#647d40", "#bd596c", "#4279bd", "#169b62", "#00a6d6", "#374151"];
 
 export function routeDistance(routes: Route[]): number {
   let sum=0;
