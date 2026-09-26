@@ -35,8 +35,8 @@ export function groupMapPhotos(trips: Trip[]): PhotoGroup[] {
 export type PhotoScreenPoint = { x: number; y: number };
 
 // Group overlapping marker footprints around stable, original representatives.
-// Comparing representatives (rather than chaining all neighbours) keeps a dense
-// route from collapsing into one enormous group. Remaining boxes cannot overlap.
+// Only merge when every pair of photos remains within 100 metres.
+// This preserves the five-metre base groups and prevents long proximity chains.
 export function groupPhotosOnScreen(
  groups: PhotoGroup[],
  project: (point: Waypoint) => PhotoScreenPoint,
@@ -48,7 +48,9 @@ export function groupPhotosOnScreen(
   const screen = project(source.members[0].point);
   const match = placed.find(candidate =>
    Math.abs(candidate.screen.x-screen.x) < width &&
-   Math.abs(candidate.screen.y-screen.y) < height);
+   Math.abs(candidate.screen.y-screen.y) < height &&
+   source.members.every(incoming => candidate.group.members.every(existing =>
+    photoDistance(incoming.point, existing.point) <= 100 + 1e-7)));
   if (match) {
    match.group.members.push(...source.members);
    match.group.count += source.count;

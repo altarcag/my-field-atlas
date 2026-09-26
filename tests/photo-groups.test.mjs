@@ -68,3 +68,17 @@ test("screen footprint considers both axes without chaining an entire route",()=
  assert.equal(groupPhotosOnScreen(groups,p=>({x:{a:0,b:72,c:144}[p.id],y:0})).length,3);
  assert.deepEqual(groupPhotosOnScreen([],()=>({x:0,y:0})),[]);
 });
+
+test("zoom grouping includes 100 metres but excludes anything farther even on screen",()=>{
+ for(const [meters,expected] of [[99.99,1],[100,1],[100.01,2],[1000,2]]){
+  const base=groupMapPhotos([trip("t",[point("a",0),point("b",meters)])]);
+  assert.equal(groupPhotosOnScreen(base,()=>({x:0,y:0})).length,expected);
+ }
+});
+test("100 metre cap applies to every member, not just group representatives",()=>{
+ const base=groupMapPhotos([trip("t",[point("a",0),point("b",-4),point("c",100)])]);
+ assert.deepEqual(base.map(g=>g.count),[2,1]);
+ assert.deepEqual(groupPhotosOnScreen(base,()=>({x:0,y:0})).map(g=>g.count),[2,1]);
+ const chain=groupMapPhotos([trip("t",[point("a",0),point("b",80),point("c",160)])]);
+ assert.deepEqual(groupPhotosOnScreen(chain,()=>({x:0,y:0})).map(g=>g.count),[2,1]);
+});
