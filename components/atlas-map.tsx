@@ -5,7 +5,7 @@ import type { FeatureCollection, Feature, Geometry } from "geojson";
 import { AlertCircle, LoaderCircle, RotateCcw } from "lucide-react";
 import { apiUrl } from "@/lib/client-api";
 import type { Trip, Waypoint } from "@/lib/types";
-import { groupMapPhotos, type PhotoPoint } from "@/lib/photo-groups";
+import { groupMapPhotos, groupPhotosOnScreen, type PhotoPoint } from "@/lib/photo-groups";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 export type MapMode="map"|"satellite"|"terrain";
@@ -85,11 +85,23 @@ const AtlasMap=forwardRef<MapHandle,Props>(function AtlasMap(props,ref) {
  },[ready,props.trips,props.selectedId,props.photosVisible]);
  useEffect(()=>{
   const map=mapRef.current,MarkerClass=markerClass.current;if(!ready||!map||!MarkerClass)return;
+  const photoGroups=props.photosVisible?groupMapPhotos(props.trips):[];
+  let frame:number|undefined,previousSignature="";
+  const renderMarkers=()=>{
+  const center=map.getCenter().lng;
+  const groups=groupPhotosOnScreen(photoGroups,point=>{
+   // Project the same nearest world copy used by MapLibre's markers.
+   const lng=center+((point.coordinates[0]-center+540)%360+360)%360-180;
+   return map.project([lng,point.coordinates[1]]);
+  });
+  const signature=JSON.stringify(groups.map(group=>group.members.map(member=>[member.trip.id,member.point.id])));
+  if(signature===previousSignature)return;
+  previousSignature=signature;
   markers.current.forEach(marker=>marker.remove());markers.current=[];
   const entries = [
    ...props.trips.flatMap(trip=>trip.points.filter(point=>!point.photos.length)
     .map(point=>({trip,point,count:0,members:undefined as PhotoPoint[]|undefined}))),
-   ...(props.photosVisible ? groupMapPhotos(props.trips).map(group=>({
+   ...(props.photosVisible ? groups.map(group=>({
     ...group.members[0],count:group.count,members:group.members,
    })) : []),
   ];
@@ -99,7 +111,7 @@ const AtlasMap=forwardRef<MapHandle,Props>(function AtlasMap(props,ref) {
    if(photo){
     const shell=document.createElement("div");shell.className="map-photo-marker";shell.style.setProperty("--marker-color",trip.color);
     const button=document.createElement("button");button.type="button";button.className="map-photo-button";
-    button.setAttribute("aria-label",`Open photo: ${point.name} · ${trip.name}`);button.title=point.name+" · "+trip.name+(photoCount>1?` · ${photoCount} nearby photos`:"");
+    button.setAttribute("aria-label",photoCount>1?`Open ${photoCount} grouped photos: ${point.name} · ${trip.name}`:`Open photo: ${point.name} · ${trip.name}`);button.title=point.name+" · "+trip.name+(photoCount>1?` · ${photoCount} grouped photos`:"");
     const image=document.createElement("img");image.src=apiUrl(photo.url);image.alt=photo.name;image.loading="lazy";image.decoding="async";
     image.addEventListener("error",()=>{image.remove();const fallback=document.createElement("span");fallback.className="map-photo-fallback";fallback.textContent="Photo";button.insertBefore(fallback,button.firstChild);},{once:true});
     button.appendChild(image);
@@ -116,7 +128,18 @@ const AtlasMap=forwardRef<MapHandle,Props>(function AtlasMap(props,ref) {
    }
    marker.setLngLat([point.coordinates[0],point.coordinates[1]]).addTo(map);markers.current.push(marker);
   }
-  return()=>{markers.current.forEach(marker=>marker.remove());markers.current=[];};
+  };
+  const schedule=()=>{
+   if(frame!==undefined)return;
+   frame=requestAnimationFrame(()=>{frame=undefined;renderMarkers();});
+  };
+  renderMarkers();
+  map.on("move",schedule);map.on("resize",schedule);
+  return()=>{
+   map.off("move",schedule);map.off("resize",schedule);
+   if(frame!==undefined)cancelAnimationFrame(frame);
+   markers.current.forEach(marker=>marker.remove());markers.current=[];
+  };
  },[ready,props.trips,props.photosVisible]);
  useEffect(()=>{
   if(ready&&!props.selectedId&&props.trips.length&&!fitted.current){fit();fitted.current="project";}

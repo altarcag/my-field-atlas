@@ -31,3 +31,30 @@ export function groupMapPhotos(trips: Trip[]): PhotoGroup[] {
  }
  return groups;
 }
+
+export type PhotoScreenPoint = { x: number; y: number };
+
+// Group overlapping marker footprints around stable, original representatives.
+// Comparing representatives (rather than chaining all neighbours) keeps a dense
+// route from collapsing into one enormous group. Remaining boxes cannot overlap.
+export function groupPhotosOnScreen(
+ groups: PhotoGroup[],
+ project: (point: Waypoint) => PhotoScreenPoint,
+ width = 72,
+ height = 82,
+): PhotoGroup[] {
+ const placed: { group: PhotoGroup; screen: PhotoScreenPoint }[] = [];
+ for (const source of groups) {
+  const screen = project(source.members[0].point);
+  const match = placed.find(candidate =>
+   Math.abs(candidate.screen.x-screen.x) < width &&
+   Math.abs(candidate.screen.y-screen.y) < height);
+  if (match) {
+   match.group.members.push(...source.members);
+   match.group.count += source.count;
+  } else {
+   placed.push({group:{members:[...source.members],count:source.count},screen});
+  }
+ }
+ return placed.map(entry => entry.group);
+}
